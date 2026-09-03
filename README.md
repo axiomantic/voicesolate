@@ -42,16 +42,16 @@ uv pip install -e .
 
 ## 💻 CLI Usage
 
-### Basic Extraction (Local File)
+### Basic Extraction (Local File with Screenplay or Subtitles)
 ```bash
-voicesolate -i "path/to/episode.mkv" -c "CLEMENS"
+voicesolate -i "path/to/movie.mkv" -s "path/to/screenplay.txt" -c "NEO"
 ```
 
 ### Remote Zero-Download Extraction (Over SSH / SFTP)
 ```bash
 voicesolate \
-  -i "sftp://nas.lan/mnt/media/Star Trek TNG S06E01 Times Arrow Part 2.mkv" \
-  -c "CLEMENS"
+  -i "sftp://nas.lan/mnt/media/film.mkv" \
+  -c "CHARACTER"
 ```
 
 ### Interactive TUI Mode
@@ -65,7 +65,8 @@ voicesolate -i "path/to/movie.mkv"
 | :--- | :--- | :--- |
 | `-i, --input` | Path or SFTP/SSH URL to video or audio file | *(Required)* |
 | `-c, --character` | Target character name(s) to export | Interactive TUI |
-| `-s, --script` | Script path, URL, or Star Trek ID (e.g. `s06e01`) | Auto-detected |
+| `-s, --script` | Script path (`.txt`, `.json`, `.srt`), or web URL | Auto-detected from video subtitles |
+| `--provider` | Optional script provider (e.g. `startrek`) | `None` |
 | `-o, --output-dir` | Directory where audio clips and manifest are saved | `./output` |
 | `--no-enhance` | Skip neural Demucs isolation (export discrete raw slices) | `False` |
 | `--wyoming-host` | Optional Wyoming Whisper STT IP | `10.0.2.141` |
