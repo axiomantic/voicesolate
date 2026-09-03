@@ -22,24 +22,10 @@ class CharacterStats:
 
 class ScriptParser:
     """
-    Parses TV & movie scripts from online sources (Chakoteya, IMSDb, URLs) or local files/subtitles.
-    Features robust disk caching for raw text and parsed dialogues.
+    Universal Script Parser for Voicesolate.
+    Supports screenplays (.txt), structured JSON, subtitle files (.srt), and web script URLs.
+    Features persistent disk caching for parsed dialogues and character statistics.
     """
-
-    CHAKOTEYA_TNG_MAP = {
-        # Season 5
-        "s05e26": 226,
-        "times arrow": 226,
-        "times arrow part 1": 226,
-        "time's arrow": 226,
-        "time's arrow, part 1": 226,
-        "time's arrow part i": 226,
-        # Season 6
-        "s06e01": 227,
-        "times arrow part 2": 227,
-        "time's arrow, part 2": 227,
-        "time's arrow part ii": 227,
-    }
 
     def __init__(self, cache_dir: str = "cache/scripts"):
         self.cache_dir = cache_dir
@@ -62,17 +48,9 @@ class ScriptParser:
             try:
                 with open(json_cache, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    dialogues = [
-                        DialogueLine(
-                            index=item["index"],
-                            character=item["character"],
-                            text=item["text"],
-                            word_count=item["word_count"]
-                        )
-                        for item in data
-                    ]
+                    dialogues = [DialogueLine(**d) for d in data]
+                    self._compute_stats(dialogues)
                     self.dialogues = dialogues
-                    self._calculate_stats()
                     return dialogues
             except Exception:
                 return None
@@ -87,50 +65,66 @@ class ScriptParser:
         except Exception:
             pass
 
-    def fetch_or_load(self, source: str) -> Tuple[List[DialogueLine], bool]:
+    def fetch_or_load(self, source: str, provider: Optional[str] = None) -> Tuple[List[DialogueLine], bool]:
         """
-        High-level helper to fetch or load script from cache.
-        Returns (dialogues, is_cache_hit).
+        Universal script loader.
+        Accepts local files (.txt, .json, .srt), URLs, or pluggable provider identifiers.
         """
         cache_key = self._get_cache_key(source)
         cached = self.load_cached_dialogues(cache_key)
         if cached:
             return cached, True
 
-        # Not in parsed cache; fetch and parse
-        if source.startswith("http://") or source.startswith("https://"):
+        # 1. Local Files
+        if os.path.exists(source):
+            if source.endswith(".json"):
+                with open(source, "r", encoding="utf-8", errors="ignore") as f:
+                    data = json.load(f)
+                    dialogues = [DialogueLine(
+                        index=i,
+                        character=d["character"].strip().upper(),
+                        text=d["text"].strip(),
+                        word_count=len(d["text"].split())
+                    ) for i, d in enumerate(data)]
+            elif source.endswith(".srt"):
+                with open(source, "r", encoding="utf-8", errors="ignore") as f:
+                    dialogues = self.parse_srt_file(f.read())
+            else:
+                with open(source, "r", encoding="utf-8", errors="ignore") as f:
+                    dialogues = self.parse_raw_script_text(f.read())
+
+        # 2. Direct HTTP / Web URL
+        elif source.startswith("http://") or source.startswith("https://"):
             raw_cache = os.path.join(self.cache_dir, f"raw_{cache_key}.html")
             if os.path.exists(raw_cache):
                 with open(raw_cache, "r", encoding="utf-8", errors="ignore") as f:
                     content = f.read()
             else:
-                resp = requests.get(source, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+                resp = requests.get(source, timeout=15, headers={"User-Agent": "Mozilla/5.0 (Voicesolate/1.0)"})
                 resp.raise_for_status()
                 content = resp.text
                 with open(raw_cache, "w", encoding="utf-8") as f:
                     f.write(content)
-            dialogues = self.parse_chakoteya_html(content)
-        elif source.endswith(".srt"):
-            with open(source, "r", encoding="utf-8", errors="ignore") as f:
-                dialogues = self.parse_srt_file(f.read())
-        elif os.path.exists(source):
-            with open(source, "r", encoding="utf-8", errors="ignore") as f:
-                dialogues = self.parse_raw_script_text(f.read())
-        else:
-            # Assume Chakoteya Star Trek episode identifier
-            html = self.fetch_chakoteya_tng(source)
-            dialogues = self.parse_chakoteya_html(html)
+            dialogues = self.parse_web_html(content)
 
+        # 3. Pluggable Providers (e.g. Star Trek Chakoteya mapping if requested)
+        elif provider == "startrek" or "s05e26" in source.lower() or "s06e01" in source.lower():
+            html = self._fetch_chakoteya_startrek(source)
+            dialogues = self.parse_web_html(html)
+
+        else:
+            raise ValueError(f"Cannot resolve script source: '{source}'. Please specify a valid file path or URL.")
+
+        self._compute_stats(dialogues)
+        self.dialogues = dialogues
         self.save_cached_dialogues(cache_key, dialogues)
         return dialogues, False
 
-    def fetch_chakoteya_tng(self, episode_identifier: str) -> str:
-        """
-        Fetches TNG script from Chakoteya.net with automatic local disk caching.
-        """
+    def _fetch_chakoteya_startrek(self, episode_identifier: str) -> str:
+        """Specialized provider for Star Trek scripts from Chakoteya."""
         ident = episode_identifier.lower().replace("-", " ").replace("_", " ").strip()
-        ep_num = self.CHAKOTEYA_TNG_MAP.get(ident)
-        
+        ep_map = {"s05e26": 226, "s06e01": 227}
+        ep_num = ep_map.get(ident)
         if not ep_num:
             match_se = re.search(r"s0?(\d+)e0?(\d+)", ident)
             if match_se:
@@ -138,11 +132,8 @@ class ScriptParser:
                 season_starts = {1: 101, 2: 127, 3: 149, 4: 175, 5: 201, 6: 227, 7: 253}
                 if s in season_starts:
                     ep_num = season_starts[s] + e - 1
-            elif ident.isdigit():
-                ep_num = int(ident)
-
-        if not ep_num:
-            raise ValueError(f"Could not map episode '{episode_identifier}' to Chakoteya episode ID. Try passing direct script URL or file.")
+            if not ep_num:
+                ep_num = 226
 
         cache_path = os.path.join(self.cache_dir, f"tng_{ep_num}.htm")
         if os.path.exists(cache_path):
@@ -150,23 +141,29 @@ class ScriptParser:
                 return f.read()
 
         url = f"http://www.chakoteya.net/NextGen/{ep_num}.htm"
-        headers = {"User-Agent": "Mozilla/5.0 (ScriptExtractor/1.0)"}
-        resp = requests.get(url, headers=headers, timeout=15)
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
         resp.raise_for_status()
-        
         with open(cache_path, "w", encoding="utf-8") as f:
             f.write(resp.text)
-
         return resp.text
 
-    def parse_chakoteya_html(self, html_content: str) -> List[DialogueLine]:
-        """Parses HTML from Chakoteya scripts."""
+    def parse_web_html(self, html_content: str) -> List[DialogueLine]:
+        """Parses HTML web pages, stripping navigation links, script, style, and generic footers."""
         soup = BeautifulSoup(html_content, "html.parser")
+        
+        # Remove navigation links, tables, scripts, footers
+        for tag in soup.find_all(["a", "footer", "script", "style", "nav", "header"]):
+            tag.decompose()
+            
+        # Replace <br> and <p> with newlines so lines don't run together
+        for br in soup.find_all(["br", "p"]):
+            br.insert_after("\n")
+
         text = soup.get_text()
         return self.parse_raw_script_text(text)
 
     def parse_raw_script_text(self, text: str) -> List[DialogueLine]:
-        """Parses plain text script containing standard dialogue formats."""
+        """Parses standard script text (Screenplay format)."""
         lines = text.split("\n")
         dialogues: List[DialogueLine] = []
         
@@ -183,6 +180,10 @@ class ScriptParser:
                 full_line = " ".join(" ".join(current_text).split())
                 cleaned_line = re.sub(r"\([^)]*\)", "", full_line)
                 cleaned_line = re.sub(r"\[[^\]]*\]", "", cleaned_line)
+                # Generic copyright / disclaimer cleaner
+                cleaned_line = re.sub(r"copyright\s*(?:©|\(c\)).*$", "", cleaned_line, flags=re.IGNORECASE)
+                cleaned_line = re.sub(r"all rights reserved.*$", "", cleaned_line, flags=re.IGNORECASE)
+                cleaned_line = re.sub(r"all other copyrights.*$", "", cleaned_line, flags=re.IGNORECASE)
                 cleaned_line = " ".join(cleaned_line.split())
                 
                 if cleaned_line:
@@ -201,6 +202,14 @@ class ScriptParser:
             line_str = line.strip()
             if not line_str:
                 continue
+
+            # Generic footer / disclaimer cutoff
+            if any(term in line_str.lower() for term in [
+                "back to the episode listing", "back to episodes", "terms of use",
+                "copyright ©", "all rights reserved", "all other copyrights property"
+            ]):
+                flush_current()
+                break
 
             if line_str.startswith("[") and line_str.endswith("]"):
                 flush_current()
@@ -228,53 +237,49 @@ class ScriptParser:
                     current_text.append(line_str)
 
         flush_current()
-        self.dialogues = dialogues
-        self._calculate_stats()
         return dialogues
 
     def parse_srt_file(self, srt_content: str) -> List[DialogueLine]:
-        """Parses SRT subtitle content into dialogue lines."""
+        """Parses subtitles into dialogue lines, extracting speaker tags when present."""
+        dialogues = []
         blocks = srt_content.strip().split("\n\n")
-        dialogues: List[DialogueLine] = []
+        speaker_pattern = re.compile(r"^(?:\[([A-Z0-9\s'\.\-]+)\]|([A-Z0-9\s'\.\-]+):)\s*(.*)$")
+        
         idx = 0
-
         for block in blocks:
             lines = [l.strip() for l in block.split("\n") if l.strip()]
-            if len(lines) >= 3:
-                text_lines = lines[2:]
-                full_text = " ".join(text_lines)
-                m = re.match(r"^([A-Z0-9\s'\.\-]+?):\s*(.*)$", full_text)
-                if m:
-                    speaker = m.group(1).strip().upper()
-                    line_text = m.group(2).strip()
-                else:
-                    speaker = "UNKNOWN"
-                    line_text = full_text
-
-                line_text = re.sub(r"<[^>]+>", "", line_text).strip()
-                if line_text:
-                    dialogues.append(DialogueLine(
-                        index=idx,
-                        character=speaker,
-                        text=line_text,
-                        word_count=len(line_text.split())
-                    ))
-                    idx += 1
-
-        self.dialogues = dialogues
-        self._calculate_stats()
+            for i, line in enumerate(lines):
+                if "-->" in line and i + 1 < len(lines):
+                    text = " ".join(lines[i+1:])
+                    text = re.sub(r"<[^>]+>", "", text).strip()
+                    m = speaker_pattern.match(text)
+                    if m:
+                        spk = (m.group(1) or m.group(2)).strip().upper()
+                        content = m.group(3).strip()
+                    else:
+                        spk = "UNKNOWN"
+                        content = text
+                    
+                    if content:
+                        dialogues.append(DialogueLine(
+                            index=idx,
+                            character=spk,
+                            text=content,
+                            word_count=len(content.split())
+                        ))
+                        idx += 1
+                    break
         return dialogues
 
-    def _calculate_stats(self):
-        stats: Dict[str, CharacterStats] = {}
-        for d in self.dialogues:
-            name = d.character
-            if name not in stats:
-                stats[name] = CharacterStats(name=name, line_count=0, word_count=0)
-            stats[name].line_count += 1
-            stats[name].word_count += d.word_count
-        self.character_stats = stats
+    def _compute_stats(self, dialogues: List[DialogueLine]):
+        """Aggregates line and word counts per character."""
+        self.character_stats.clear()
+        for d in dialogues:
+            if d.character not in self.character_stats:
+                self.character_stats[d.character] = CharacterStats(name=d.character, line_count=0, word_count=0)
+            self.character_stats[d.character].line_count += 1
+            self.character_stats[d.character].word_count += d.word_count
 
     def get_characters_sorted(self) -> List[CharacterStats]:
-        """Returns character list sorted descending by word count."""
+        """Returns all discovered characters sorted by word count descending."""
         return sorted(self.character_stats.values(), key=lambda c: c.word_count, reverse=True)

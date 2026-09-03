@@ -133,14 +133,15 @@ class AudioExtractor:
         ]
         return self._run_cmd(cmd)
 
-    def export_clip(self, start_sec: float, end_sec: float, output_path: str, padding_sec: float = 0.05):
+    def export_clip(self, start_sec: float, end_sec: float, output_path: str, padding_sec: float = 0.0):
         """
         Extracts discrete Front Center dialogue track at 48kHz 24-bit PCM.
         Zero comb filtering, full frequency bandwidth.
+        Zero leading padding ensures no bleed from preceding actors.
         """
         duration = self.get_duration()
-        padded_start = max(0.0, start_sec - padding_sec)
-        padded_end = min(duration, end_sec + padding_sec)
+        padded_start = max(0.0, start_sec)
+        padded_end = min(duration, end_sec + 0.05)
         clip_duration = padded_end - padded_start
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)

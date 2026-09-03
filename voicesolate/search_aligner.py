@@ -275,8 +275,42 @@ class SearchAligner:
 
             if best_span and best_span[2] >= 60.0:
                 i_s, i_e, match_ratio = best_span
-                snapped_start = max(0.0, whisper_words[i_s]["start"] - 0.05)
-                snapped_end = min(self.duration, whisper_words[i_e]["end"] + 0.05)
-                return snapped_start, snapped_end, float(match_ratio)
+                raw_w_start = whisper_words[i_s]["start"]
+                raw_w_end = whisper_words[i_e]["end"]
+
+                # Acoustic Energy Valley Snapping: find quietest pause point right before vocal onset
+                snapped_start = raw_w_start
+                try:
+                    sr = 16000
+                    # If audio_data is already in memory from fresh transcription, use it; otherwise extract quick slice
+                    if "audio_data" in locals() and audio_data is not None:
+                        a_buf = audio_data
+                        a_base = probe_start
+                    else:
+                        slice_t = max(0.0, raw_w_start - 0.25)
+                        pcm_valley = self.extractor.extract_slice_pcm(slice_t, 0.6, sample_rate=sr)
+                        a_buf = np.frombuffer(pcm_valley, dtype=np.int16).astype(np.float32) / 32768.0
+                        a_base = slice_t
+
+                    frame_sz = int(0.03 * sr)
+                    hop_sz = int(0.01 * sr)
+                    min_rms = float("inf")
+                    best_valley_t = raw_w_start
+                    for f_i in range(0, len(a_buf) - frame_sz, hop_sz):
+                        cur_t = a_base + f_i / sr
+                        if raw_w_start - 0.25 <= cur_t <= raw_w_start + 0.30:
+                            frm = a_buf[f_i:f_i+frame_sz]
+                            rms = float(np.sqrt(np.mean(frm**2)))
+                            if rms < min_rms:
+                                min_rms = rms
+                                best_valley_t = cur_t
+
+                    if abs(best_valley_t - raw_w_start) <= 0.30:
+                        snapped_start = best_valley_t
+                except Exception:
+                    pass
+
+                snapped_end = min(self.duration, raw_w_end + 0.05)
+                return max(0.0, snapped_start), snapped_end, float(match_ratio)
 
         return start_sec, end_sec, 80.0

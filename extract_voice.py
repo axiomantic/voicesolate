@@ -9,12 +9,13 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeRemainingColumn
 
-from mark_twain_voice.wyoming_client import WyomingSTTClient
-from mark_twain_voice.script_parser import ScriptParser
-from mark_twain_voice.tui import prompt_character_selection, display_character_table
-from mark_twain_voice.audio_extractor import AudioExtractor
-from mark_twain_voice.search_aligner import SearchAligner
-from mark_twain_voice.audio_enhancer import AudioEnhancer
+from .wyoming_client import WyomingSTTClient
+from .script_parser import ScriptParser
+from .tui import prompt_character_selection, display_character_table
+from .audio_extractor import AudioExtractor
+from .search_aligner import SearchAligner
+from .audio_enhancer import AudioEnhancer
+from .cache_manager import CacheManager
 
 console = Console()
 
@@ -23,7 +24,8 @@ def parse_args():
         description="Extract and enhance character voice audio from video/audio files using Wyoming STT and ML models."
     )
     parser.add_argument("-i", "--input", required=True, help="Path to input video or audio file (e.g. episode.mkv)")
-    parser.add_argument("-s", "--script", default=None, help="Script path, URL, or Star Trek episode ID (e.g. 's05e26' or 'Time\\'s Arrow')")
+    parser.add_argument("-s", "--script", default=None, help="Script path (.txt, .json, .srt), URL, or episode ID")
+    parser.add_argument("--provider", default=None, help="Optional script provider (e.g. 'startrek')")
     parser.add_argument("-o", "--output-dir", default="./output", help="Directory where character audio clips will be saved")
     parser.add_argument("-c", "--character", nargs="+", default=None, help="Specific character(s) to export (bypasses interactive TUI)")
     parser.add_argument("--wyoming-host", default="10.0.2.141", help="Wyoming STT server IP/hostname (default: 10.0.2.141)")
@@ -53,25 +55,23 @@ def main():
     output_base_dir.mkdir(parents=True, exist_ok=True)
 
     console.print(Panel.fit(
-        f"[bold cyan]🎙️ Mark Twain Voice Pipeline[/bold cyan]\n"
+        f"[bold cyan]🎙️ Voicesolate — Character Dialogue Extraction & Studio Isolation[/bold cyan]\n"
         f"[yellow]Input Source:[/yellow] {display_input}\n"
         f"[yellow]Mode:[/yellow] {'Remote Zero-Download Chunk Seeking (SSH/SFTP)' if extractor.is_remote else 'Local Audio Seeking'}\n"
         f"[yellow]Wyoming Server:[/yellow] {args.wyoming_host}:{args.wyoming_port}\n"
         f"[yellow]Output Target:[/yellow] {output_base_dir}",
-        title="Configuration"
+        border_style="cyan"
     ))
 
-    # Test Wyoming STT connectivity
-    console.print(f"[cyan]Testing connection to Wyoming STT ({args.wyoming_host}:{args.wyoming_port})...[/cyan]")
+    # Optional connection check to Wyoming STT
     stt_client = WyomingSTTClient(host=args.wyoming_host, port=args.wyoming_port)
     try:
-        health = stt_client.check_health()
-        asr_info = health.get("asr", [{}])[0].get("name", "Whisper")
-        console.print(f"[green]✓ Connected to Wyoming STT ({asr_info})[/green]\n")
+        console.print(f"[blue]Testing connection to Wyoming STT ({args.wyoming_host}:{args.wyoming_port})...[/blue]")
+        stt_client.check_health()
+        console.print("[green]✓ Connected to Wyoming STT (Whisper)[/green]\n")
     except Exception as e:
-        console.print(f"[bold red]✗ Failed to connect to Wyoming server:[/bold red] {e}")
-        console.print("[yellow]Please check server address and port.[/yellow]")
-        sys.exit(1)
+        console.print(f"[yellow]Notice: Wyoming STT not reachable ({e}). Using local faster-whisper.[/yellow]\n")
+        stt_client = None
 
     # Get Media Duration
     media_duration = extractor.get_duration()
@@ -80,32 +80,34 @@ def main():
     # Fetch & Parse Script
     parser = ScriptParser()
     script_source = args.script
+    provider = args.provider
 
-    # Auto-detect script if not provided
+    # Generic Script Auto-detection
     if not script_source:
-        # Check if episode name matches pattern (e.g. s06e01 or s05e26)
-        m = re.search(r"s(\d{2})e(\d{2})", episode_name.lower())
-        if m:
-            script_source = f"s{m.group(1)}e{m.group(2)}"
-            console.print(f"[cyan]Auto-detected Star Trek episode script:[/cyan] {script_source}")
-        elif "times arrow part 2" in episode_name.lower() or "part 2" in episode_name.lower():
-            script_source = "s06e01"
-            console.print(f"[cyan]Auto-detected Star Trek episode script:[/cyan] {script_source}")
-        elif "times arrow" in episode_name.lower():
-            script_source = "s05e26"
-            console.print(f"[cyan]Auto-detected Star Trek episode script:[/cyan] {script_source}")
-        else:
-            # Check for embedded subtitles
+        # Check if user specified a provider or if Star Trek pattern is obvious
+        if provider == "startrek" or "star trek" in episode_name.lower():
+            m = re.search(r"s(\d{2})e(\d{2})", episode_name.lower())
+            if m:
+                script_source = f"s{m.group(1)}e{m.group(2)}"
+                provider = "startrek"
+                console.print(f"[cyan]Detected Star Trek episode script:[/cyan] {script_source}")
+            elif "times arrow" in episode_name.lower():
+                script_source = "s06e01" if "part 2" in episode_name.lower() else "s05e26"
+                provider = "startrek"
+                console.print(f"[cyan]Detected Star Trek episode script:[/cyan] {script_source}")
+
+        if not script_source:
+            # Universal fallback: Check for embedded subtitles in video file
             temp_srt = str(output_base_dir / "embedded_subs.srt")
             if extractor.extract_embedded_subtitles(temp_srt):
                 script_source = temp_srt
                 console.print("[cyan]Found and extracted embedded subtitles from video.[/cyan]")
             else:
-                console.print("[yellow]No script provided. Please specify --script <file_or_id> or URL.[/yellow]")
+                console.print("[yellow]No script specified. Please provide a script file, URL, or subtitle path with --script <file_or_url>[/yellow]")
                 sys.exit(1)
 
     console.print(f"[cyan]Retrieving script from:[/cyan] {script_source}...")
-    dialogues, is_cached = parser.fetch_or_load(script_source)
+    dialogues, is_cached = parser.fetch_or_load(script_source, provider=provider)
     if is_cached:
         console.print("[green]✓ Loaded from local script cache (0 network latency)[/green]")
     else:
