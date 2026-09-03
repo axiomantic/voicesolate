@@ -1,0 +1,2270 @@
+[
+  {
+    "index": 0,
+    "character": "45959.1",
+    "text": "Original Airdate: 15 Jun, 1992 Captain's log, stardate 45959.1. The Enterprise has been recalled to sector zero zero one on a priority mission. All we've been told is that evidence has been discovered indicating the presence of extraterrestrials on Earth five centuries ago.",
+    "word_count": 43
+  },
+  {
+    "index": 1,
+    "character": "SCIENTIST",
+    "text": "Work crews were down here installing seismic regulators when they found some remarkable artefacts.",
+    "word_count": 14
+  },
+  {
+    "index": 2,
+    "character": "PICARD",
+    "text": "And it's been determined that they date back to the late nineteenth century?",
+    "word_count": 13
+  },
+  {
+    "index": 3,
+    "character": "SCIENTIST",
+    "text": "Yes.",
+    "word_count": 1
+  },
+  {
+    "index": 4,
+    "character": "DATA",
+    "text": "The bifocal vision aid is typical of the era. The weapon is a forty five calibre double-action cavalry pistol invented by Colt Firearms in 1873.",
+    "word_count": 25
+  },
+  {
+    "index": 5,
+    "character": "SCIENTIST",
+    "text": "Here, look inside the watch. .",
+    "word_count": 6
+  },
+  {
+    "index": 6,
+    "character": "PICARD",
+    "text": "What makes you think that extraterrestrials are related to these discoveries.",
+    "word_count": 11
+  },
+  {
+    "index": 7,
+    "character": "SCIENTIST",
+    "text": "The crew was having a problem with the regulators. Something inside the cavern was interfering with the phase conditioners. It turned out to be the cavern itself.",
+    "word_count": 27
+  },
+  {
+    "index": 8,
+    "character": "DATA",
+    "text": "The composition of the exposed rock face has been altered by exposure to triolic waves.",
+    "word_count": 15
+  },
+  {
+    "index": 9,
+    "character": "SCIENTIST",
+    "text": "Which you're not going to find on Earth in either the nineteenth or twenty fourth century.",
+    "word_count": 16
+  },
+  {
+    "index": 10,
+    "character": "PICARD",
+    "text": "Triolic waves?",
+    "word_count": 2
+  },
+  {
+    "index": 11,
+    "character": "DATA",
+    "text": "The by-product of an energy source employed by very few species because of its deleterious effect on living tissue.",
+    "word_count": 19
+  },
+  {
+    "index": 12,
+    "character": "SCIENTIST",
+    "text": "We've confirmed that no one has been in or out of this cavern in centuries, so we're left with a five hundred year old mystery.",
+    "word_count": 25
+  },
+  {
+    "index": 13,
+    "character": "PICARD",
+    "text": "I'm curious, Doctor. There are far greater experts on Earth to investigate your mystery. Why bring the Enterprise all the way home?",
+    "word_count": 22
+  },
+  {
+    "index": 14,
+    "character": "SCIENTIST",
+    "text": "As we continued our excavation, we found one other thing I haven't shown you yet. We've tried to leave everything as we found it. Captain's log, stardate 45960.2. We have transported the materials discovered in the cavern back to the ship for analysis. I wish I could be as dispassionate about the implications as my second officer.",
+    "word_count": 57
+  },
+  {
+    "index": 15,
+    "character": "DATA",
+    "text": "Interesting. There is a twelve percent decomposition of the bitanium in the neural pathway links. That suggests the alloys are vulnerable to",
+    "word_count": 22
+  },
+  {
+    "index": 16,
+    "character": "RIKER",
+    "text": "Data, how can you look inside that, analyse the decomposition without",
+    "word_count": 11
+  },
+  {
+    "index": 17,
+    "character": "DATA",
+    "text": "Emotion, sir?",
+    "word_count": 2
+  },
+  {
+    "index": 18,
+    "character": "RIKER",
+    "text": "Yes..",
+    "word_count": 1
+  },
+  {
+    "index": 19,
+    "character": "DATA",
+    "text": "I am simply trying to make an objective assessment.",
+    "word_count": 9
+  },
+  {
+    "index": 20,
+    "character": "PICARD",
+    "text": "Data, is this yours?",
+    "word_count": 4
+  },
+  {
+    "index": 21,
+    "character": "DATA",
+    "text": "I believe so, sir.",
+    "word_count": 4
+  },
+  {
+    "index": 22,
+    "character": "PICARD",
+    "text": "Could it be Lore?",
+    "word_count": 4
+  },
+  {
+    "index": 23,
+    "character": "DATA",
+    "text": "No, sir. My brother's positronic brain has a type L phase discriminating amplifier. Mine is a type R.",
+    "word_count": 18
+  },
+  {
+    "index": 24,
+    "character": "PICARD",
+    "text": "Type R?",
+    "word_count": 2
+  },
+  {
+    "index": 25,
+    "character": "DATA",
+    "text": "Yes, sir.",
+    "word_count": 2
+  },
+  {
+    "index": 26,
+    "character": "PICARD",
+    "text": "Can you predict how long this has been in the cavern?",
+    "word_count": 11
+  },
+  {
+    "index": 27,
+    "character": "DATA",
+    "text": "Decomposition strongly indicates that life was terminated approximately five hundred years ago. That would be consistent with the other artefacts we recovered.",
+    "word_count": 22
+  },
+  {
+    "index": 28,
+    "character": "RIKER",
+    "text": "Your head is not an artefact.",
+    "word_count": 6
+  },
+  {
+    "index": 29,
+    "character": "DATA",
+    "text": "In relative terms, perhaps not. Nevertheless, it seems clear that my life is to end in the late nineteenth century.",
+    "word_count": 20
+  },
+  {
+    "index": 30,
+    "character": "RIKER",
+    "text": "Not if we can help it.",
+    "word_count": 6
+  },
+  {
+    "index": 31,
+    "character": "DATA",
+    "text": "There is no way anyone can prevent it, sir. At some future date, I will be transported back to nineteenth century Earth, where I will die. It has occurred. It will occur.",
+    "word_count": 32
+  },
+  {
+    "index": 32,
+    "character": "LAFORGE",
+    "text": "Well, I can't tell you exactly who the aliens were, but I have found out a few things. The triolicised rock face tells us we're probably dealing with a species with microcentrum cell membranes. Triolic waves wouldn't harm them. It also might mean they're shape shifters of some kind.",
+    "word_count": 49
+  },
+  {
+    "index": 33,
+    "character": "RIKER",
+    "text": "So they could have appeared on Earth as humans.",
+    "word_count": 9
+  },
+  {
+    "index": 34,
+    "character": "LAFORGE",
+    "text": "I don't think it's anyone we've run into before. Nothing we found matches up with any known lifeforms. What does match up is a cellular fossil which might have been along just for the ride.",
+    "word_count": 35
+  },
+  {
+    "index": 35,
+    "character": "PICARD",
+    "text": "A cellular fossil?",
+    "word_count": 3
+  },
+  {
+    "index": 36,
+    "character": "LAFORGE",
+    "text": "A microscopic ciliated lifeform. Not unlike a thousand other single-celled lifeforms you'd find on any planet surface, except this particular one is LB one zero four four five. And LB one zero four four five is only known to exist on one place. Devidia Two, in the Marrab sector.",
+    "word_count": 49
+  },
+  {
+    "index": 37,
+    "character": "PICARD",
+    "text": "Number One, lay in a course.",
+    "word_count": 6
+  },
+  {
+    "index": 38,
+    "character": "RIKER",
+    "text": "On my way.",
+    "word_count": 3
+  },
+  {
+    "index": 39,
+    "character": "LAFORGE",
+    "text": "So, do you want to talk about it?",
+    "word_count": 8
+  },
+  {
+    "index": 40,
+    "character": "DATA",
+    "text": "Are you referring to the foreknowledge of my death?",
+    "word_count": 9
+  },
+  {
+    "index": 41,
+    "character": "LAFORGE",
+    "text": "Yeah.",
+    "word_count": 1
+  },
+  {
+    "index": 42,
+    "character": "DATA",
+    "text": "I have no particular desire to discuss the matter. Do you need to talk about it?",
+    "word_count": 16
+  },
+  {
+    "index": 43,
+    "character": "LAFORGE",
+    "text": "Yeah.",
+    "word_count": 1
+  },
+  {
+    "index": 44,
+    "character": "DATA",
+    "text": "Why?",
+    "word_count": 1
+  },
+  {
+    "index": 45,
+    "character": "LAFORGE",
+    "text": "Data, this has got to bother you a little.",
+    "word_count": 9
+  },
+  {
+    "index": 46,
+    "character": "DATA",
+    "text": "On the contrary. I find it rather comforting.",
+    "word_count": 8
+  },
+  {
+    "index": 47,
+    "character": "LAFORGE",
+    "text": "Comforting?",
+    "word_count": 1
+  },
+  {
+    "index": 48,
+    "character": "DATA",
+    "text": "I have often wondered about my own mortality as I have seen others around me age. Until now it has been theoretically possible that I would live an unlimited period of time. And although some might find this attractive, to me it only reinforces the fact that I am artificial.",
+    "word_count": 50
+  },
+  {
+    "index": 49,
+    "character": "LAFORGE",
+    "text": "I never knew how tough this must be for you.",
+    "word_count": 10
+  },
+  {
+    "index": 50,
+    "character": "DATA",
+    "text": "Tough? As in difficult?",
+    "word_count": 4
+  },
+  {
+    "index": 51,
+    "character": "LAFORGE",
+    "text": "Knowing that you would outlive all your friends.",
+    "word_count": 8
+  },
+  {
+    "index": 52,
+    "character": "DATA",
+    "text": "I expected to make new friends.",
+    "word_count": 6
+  },
+  {
+    "index": 53,
+    "character": "LAFORGE",
+    "text": "True.",
+    "word_count": 1
+  },
+  {
+    "index": 54,
+    "character": "DATA",
+    "text": "And then to outlive them as well.",
+    "word_count": 7
+  },
+  {
+    "index": 55,
+    "character": "LAFORGE",
+    "text": "Now that you know that you might not?",
+    "word_count": 8
+  },
+  {
+    "index": 56,
+    "character": "DATA",
+    "text": "It provides a sense of completion to my future. In a way, I am not that different from anyone else. I can now look forward to death.",
+    "word_count": 27
+  },
+  {
+    "index": 57,
+    "character": "LAFORGE",
+    "text": "I never thought of it that way.",
+    "word_count": 7
+  },
+  {
+    "index": 58,
+    "character": "DATA",
+    "text": "One might also conclude that it brings me one step closer to being human. I am mortal.",
+    "word_count": 17
+  },
+  {
+    "index": 59,
+    "character": "PICARD",
+    "text": "Picard to Bridge officers. We're approaching the Devidia system. Report to your stations.",
+    "word_count": 13
+  },
+  {
+    "index": 60,
+    "character": "LAFORGE",
+    "text": "I'll see you later. Let's get together for a game of chess or something, okay?",
+    "word_count": 15
+  },
+  {
+    "index": 61,
+    "character": "GUINAN",
+    "text": "That sounded like a very intense discussion.",
+    "word_count": 7
+  },
+  {
+    "index": 62,
+    "character": "LAFORGE",
+    "text": "Yeah. They found Data's head a mile beneath San Francisco. Been down there about five centuries.",
+    "word_count": 16
+  },
+  {
+    "index": 63,
+    "character": "GUINAN",
+    "text": "That's why the Enterprise has been sent back to Earth. I didn't realise.",
+    "word_count": 13
+  },
+  {
+    "index": 64,
+    "character": "LAFORGE",
+    "text": "It's something, isn't it? He seems fine about it. Better than I am. Well, I'd better get to Engineering.",
+    "word_count": 19
+  },
+  {
+    "index": 65,
+    "character": "GUINAN",
+    "text": "Full circle.",
+    "word_count": 2
+  },
+  {
+    "index": 66,
+    "character": "TROI",
+    "text": "I heard about Data.",
+    "word_count": 4
+  },
+  {
+    "index": 67,
+    "character": "RIKER",
+    "text": "Yeah.",
+    "word_count": 1
+  },
+  {
+    "index": 68,
+    "character": "TROI",
+    "text": "It's having an unusually traumatic effect on everyone.",
+    "word_count": 8
+  },
+  {
+    "index": 69,
+    "character": "RIKER",
+    "text": "Yeah.",
+    "word_count": 1
+  },
+  {
+    "index": 70,
+    "character": "TROI",
+    "text": "If you don't want to talk about it, it's okay.",
+    "word_count": 10
+  },
+  {
+    "index": 71,
+    "character": "RIKER",
+    "text": "I'm fine. I'm just",
+    "word_count": 4
+  },
+  {
+    "index": 72,
+    "character": "TROI",
+    "text": "Angry.",
+    "word_count": 1
+  },
+  {
+    "index": 73,
+    "character": "RIKER",
+    "text": "I'm not angry. Yeah, I'm angry. Why should I be angry?",
+    "word_count": 11
+  },
+  {
+    "index": 74,
+    "character": "TROI",
+    "text": "Maybe because it reminds us of our own mortality.",
+    "word_count": 9
+  },
+  {
+    "index": 75,
+    "character": "RIKER",
+    "text": "I just don't want to believe it.",
+    "word_count": 7
+  },
+  {
+    "index": 76,
+    "character": "TROI",
+    "text": "Have you ever heard Data define friendship?",
+    "word_count": 7
+  },
+  {
+    "index": 77,
+    "character": "RIKER",
+    "text": "No.",
+    "word_count": 1
+  },
+  {
+    "index": 78,
+    "character": "TROI",
+    "text": "How did he put it? As I experience certain sensory input patterns, my mental pathways become accustomed to them. The inputs eventually are anticipated and even missed when absent.",
+    "word_count": 29
+  },
+  {
+    "index": 79,
+    "character": "RIKER",
+    "text": "So what's the point?",
+    "word_count": 4
+  },
+  {
+    "index": 80,
+    "character": "TROI",
+    "text": "He's used to us, and we're used to him. It's like finding out someone you love has a terminal illness and",
+    "word_count": 21
+  },
+  {
+    "index": 81,
+    "character": "RIKER",
+    "text": "Data.",
+    "word_count": 1
+  },
+  {
+    "index": 82,
+    "character": "DATA",
+    "text": "Counsellor. Commander.",
+    "word_count": 2
+  },
+  {
+    "index": 83,
+    "character": "DATA",
+    "text": "Would either of you mind if I made a personal inquiry?",
+    "word_count": 11
+  },
+  {
+    "index": 84,
+    "character": "TROI",
+    "text": "Personal inquiry? No, go right ahead.",
+    "word_count": 6
+  },
+  {
+    "index": 85,
+    "character": "DATA",
+    "text": "I am perceiving an apparent change in the way others behave toward me. For example, people abruptly end conversations when I appear, just as you did when the turbolift doors opened. Is that an accurate observation?",
+    "word_count": 36
+  },
+  {
+    "index": 86,
+    "character": "RIKER",
+    "text": "Not at all.",
+    "word_count": 3
+  },
+  {
+    "index": 87,
+    "character": "TROI",
+    "text": "Yes.",
+    "word_count": 1
+  },
+  {
+    "index": 88,
+    "character": "RIKER",
+    "text": "Yes.",
+    "word_count": 1
+  },
+  {
+    "index": 89,
+    "character": "TROI",
+    "text": "You're right, Data. And it's not a very nice thing to do.",
+    "word_count": 12
+  },
+  {
+    "index": 90,
+    "character": "RIKER",
+    "text": "It's just that our mental pathways have become accustomed to your sensory input patterns.",
+    "word_count": 14
+  },
+  {
+    "index": 91,
+    "character": "DATA",
+    "text": "I understand. I am also fond of you, Commander. And you as well, Counsellor.",
+    "word_count": 14
+  },
+  {
+    "index": 92,
+    "character": "RIKER",
+    "text": "We're in orbit.",
+    "word_count": 3
+  },
+  {
+    "index": 93,
+    "character": "PICARD",
+    "text": "Any sign of life?",
+    "word_count": 4
+  },
+  {
+    "index": 94,
+    "character": "WORF",
+    "text": "Negative, sir.",
+    "word_count": 2
+  },
+  {
+    "index": 95,
+    "character": "DATA",
+    "text": "Captain, sensors are picking up an unusual temporal disturbance on a small area of the planet's surface. Forty two degrees seven minutes north by eighty eight degrees declination east.",
+    "word_count": 29
+  },
+  {
+    "index": 96,
+    "character": "RIKER",
+    "text": "Temporal disturbance?",
+    "word_count": 2
+  },
+  {
+    "index": 97,
+    "character": "PICARD",
+    "text": "Put us in a standard orbit above those coordinates.",
+    "word_count": 9
+  },
+  {
+    "index": 98,
+    "character": "DATA",
+    "text": "Spectral analysis shows a high level of triolic waves emanating from the same location.",
+    "word_count": 14
+  },
+  {
+    "index": 99,
+    "character": "RIKER",
+    "text": "Any correlation with the readings from Earth?",
+    "word_count": 7
+  },
+  {
+    "index": 100,
+    "character": "DATA",
+    "text": "Affirmative, sir. The magnetic signature is identical to the one found in the cavern.",
+    "word_count": 14
+  },
+  {
+    "index": 101,
+    "character": "PICARD",
+    "text": "Would these triolic waves be dangerous to humanoids?",
+    "word_count": 8
+  },
+  {
+    "index": 102,
+    "character": "DATA",
+    "text": "Only with long term exposure, sir. There is no immediate threat.",
+    "word_count": 11
+  },
+  {
+    "index": 103,
+    "character": "PICARD",
+    "text": "Take an away team.",
+    "word_count": 4
+  },
+  {
+    "index": 104,
+    "character": "RIKER",
+    "text": "Worf. Geordi. Troi. Join me in transporter room three for an away team.",
+    "word_count": 13
+  },
+  {
+    "index": 105,
+    "character": "DATA",
+    "text": "Commander.",
+    "word_count": 1
+  },
+  {
+    "index": 106,
+    "character": "PICARD",
+    "text": "Mister Data, I'll need your help to monitor the sensor readings during this investigation.",
+    "word_count": 14
+  },
+  {
+    "index": 107,
+    "character": "DATA",
+    "text": "Captain, may I speak to you alone?",
+    "word_count": 7
+  },
+  {
+    "index": 108,
+    "character": "DATA",
+    "text": "Sir, it is standard procedure that the second officer accompany the away team.",
+    "word_count": 13
+  },
+  {
+    "index": 109,
+    "character": "PICARD",
+    "text": "Yes, yes, Mister Data, I am aware of that.",
+    "word_count": 9
+  },
+  {
+    "index": 110,
+    "character": "DATA",
+    "text": "Then I must assume your decision is related to the discovery on Earth of",
+    "word_count": 14
+  },
+  {
+    "index": 111,
+    "character": "PICARD",
+    "text": "I think it is reasonable to take precautions.",
+    "word_count": 8
+  },
+  {
+    "index": 112,
+    "character": "DATA",
+    "text": "Captain, there is no rational justification for this course.",
+    "word_count": 9
+  },
+  {
+    "index": 113,
+    "character": "PICARD",
+    "text": "Then I'll be irrational.",
+    "word_count": 4
+  },
+  {
+    "index": 114,
+    "character": "DATA",
+    "text": "It is possible, sir, that the events leading to my death will not occur for years, even centuries.",
+    "word_count": 18
+  },
+  {
+    "index": 115,
+    "character": "PICARD",
+    "text": "I hope that's true, Mister Data. Nevertheless, this investigation began with your death. I am simply trying to see that it doesn't end that way.",
+    "word_count": 25
+  },
+  {
+    "index": 116,
+    "character": "DATA",
+    "text": "I appreciate your concern, Captain, but, to employ an aphorism, one cannot cheat fate.",
+    "word_count": 14
+  },
+  {
+    "index": 117,
+    "character": "PICARD",
+    "text": "Cheat fate? Perhaps we can't, Mister Data. But at least we can give it a try.",
+    "word_count": 16
+  },
+  {
+    "index": 118,
+    "character": "LAFORGE",
+    "text": "The concentration of triolic waves falls off about here. It increases exponentially the closer in we go.",
+    "word_count": 17
+  },
+  {
+    "index": 119,
+    "character": "RIKER",
+    "text": "What's the source? Something underground?",
+    "word_count": 5
+  },
+  {
+    "index": 120,
+    "character": "LAFORGE",
+    "text": "Negative, Commander.",
+    "word_count": 2
+  },
+  {
+    "index": 121,
+    "character": "RIKER",
+    "text": "What's the explanation?",
+    "word_count": 3
+  },
+  {
+    "index": 122,
+    "character": "LAFORGE",
+    "text": "I don't have one yet. La Forge to Enterprise.",
+    "word_count": 9
+  },
+  {
+    "index": 123,
+    "character": "DATA",
+    "text": "Go ahead.",
+    "word_count": 2
+  },
+  {
+    "index": 124,
+    "character": "LAFORGE",
+    "text": "Data, run a spectral field correlation for me. Let's find out if these triolic readings are in any way related",
+    "word_count": 20
+  },
+  {
+    "index": 125,
+    "character": "LAFORGE",
+    "text": "To the temporal distortions.",
+    "word_count": 4
+  },
+  {
+    "index": 126,
+    "character": "DATA",
+    "text": "Acknowledged.",
+    "word_count": 1
+  },
+  {
+    "index": 127,
+    "character": "RIKER",
+    "text": "Deanna?",
+    "word_count": 1
+  },
+  {
+    "index": 128,
+    "character": "TROI",
+    "text": "There's life here. A child. An old woman. Dozens more. Hundreds. Terrified.",
+    "word_count": 12
+  },
+  {
+    "index": 129,
+    "character": "RIKER",
+    "text": "Terrified?",
+    "word_count": 1
+  },
+  {
+    "index": 130,
+    "character": "TROI",
+    "text": "My God, Will. They're human.",
+    "word_count": 5
+  },
+  {
+    "index": 131,
+    "character": "RIKER",
+    "text": "Whatever they are, Troi's convinced they're human. They may be trapped somehow. We're not sure.",
+    "word_count": 15
+  },
+  {
+    "index": 132,
+    "character": "DATA",
+    "text": "Captain, the results of my temporal analysis may be pertinent.",
+    "word_count": 10
+  },
+  {
+    "index": 133,
+    "character": "PICARD",
+    "text": "Go ahead.",
+    "word_count": 2
+  },
+  {
+    "index": 134,
+    "character": "DATA",
+    "text": "Geordi, it indicates a synchronic distortion in the areas emanating",
+    "word_count": 10
+  },
+  {
+    "index": 135,
+    "character": "DATA",
+    "text": "Triolic waves.",
+    "word_count": 2
+  },
+  {
+    "index": 136,
+    "character": "LAFORGE",
+    "text": "That explains a few things. How much, Data?",
+    "word_count": 8
+  },
+  {
+    "index": 137,
+    "character": "DATA",
+    "text": "A positive displacement of point zero zero four percent.",
+    "word_count": 9
+  },
+  {
+    "index": 138,
+    "character": "LAFORGE",
+    "text": "Well, whatever or whoever is there, we're out of phase with it, but we're only talking by a fraction of a second.",
+    "word_count": 22
+  },
+  {
+    "index": 139,
+    "character": "WORF",
+    "text": "A fraction of a second would make them invisible?",
+    "word_count": 9
+  },
+  {
+    "index": 140,
+    "character": "LAFORGE",
+    "text": "A millisecond, a year, it wouldn't make any difference. If what we're reading is true, then we're occupying the same space but in a different time.",
+    "word_count": 26
+  },
+  {
+    "index": 141,
+    "character": "RIKER",
+    "text": "How do we compensate?",
+    "word_count": 4
+  },
+  {
+    "index": 142,
+    "character": "DATA",
+    "text": "Commander, we might be able to",
+    "word_count": 6
+  },
+  {
+    "index": 143,
+    "character": "DATA",
+    "text": "Manipulate the synchronic distortion.",
+    "word_count": 4
+  },
+  {
+    "index": 144,
+    "character": "LAFORGE",
+    "text": "Maybe. If we were to create a contained subspace force field.",
+    "word_count": 11
+  },
+  {
+    "index": 145,
+    "character": "LAFORGE",
+    "text": "But to get a point zero zero four variance, we'd need an incredibly sensitive phase discriminator, Data. I don't think we've got one that would come close.",
+    "word_count": 27
+  },
+  {
+    "index": 146,
+    "character": "DATA",
+    "text": "Yes, we do.",
+    "word_count": 3
+  },
+  {
+    "index": 147,
+    "character": "DATA",
+    "text": "It is built into my positronic decompiler. It will be necessary for me to join the away team, sir.",
+    "word_count": 19
+  },
+  {
+    "index": 148,
+    "character": "PICARD",
+    "text": "Proceed, Mister Data.",
+    "word_count": 3
+  },
+  {
+    "index": 149,
+    "character": "RIKER",
+    "text": "Mister Data.",
+    "word_count": 2
+  },
+  {
+    "index": 150,
+    "character": "DATA",
+    "text": "Sir.",
+    "word_count": 1
+  },
+  {
+    "index": 151,
+    "character": "LAFORGE",
+    "text": "Let me give you a hand with that, Data.",
+    "word_count": 9
+  },
+  {
+    "index": 152,
+    "character": "DATA",
+    "text": "Once I have adjusted the forcefield, I will no longer be visible, Commander. I have taken steps, however, to ensure that you will still be able to hear me. If you would assist me in a test of the comm. system. My voice will be transmitted on a delay correlated to the phase adjustment. That should allow me to maintain verbal contact.",
+    "word_count": 62
+  },
+  {
+    "index": 153,
+    "character": "RIKER",
+    "text": "Will we be able to talk to you?",
+    "word_count": 8
+  },
+  {
+    "index": 154,
+    "character": "DATA",
+    "text": "No, sir. That will not be possible.",
+    "word_count": 7
+  },
+  {
+    "index": 155,
+    "character": "LAFORGE",
+    "text": "The subspace field has been established. You're set to go, Data.",
+    "word_count": 11
+  },
+  {
+    "index": 156,
+    "character": "DATA",
+    "text": "Adjusting the synchronic distortion. Point zero zero one. Point zero zero two. Point zero zero three. Point zero zero four.",
+    "word_count": 20
+  },
+  {
+    "index": 157,
+    "character": "DATA",
+    "text": "I have made visual contact. There are lifeforms here.",
+    "word_count": 9
+  },
+  {
+    "index": 158,
+    "character": "DATA",
+    "text": "They're either unaware of me or choosing to ignore me. I am moving approximately ten metres north of my starting position to observe more closely.",
+    "word_count": 25
+  },
+  {
+    "index": 159,
+    "character": "DATA",
+    "text": "They range from two to three metres in height. Silver grey in colour. They have four limbs. No eyes or ears are noticeable. There is a single orifice where a humanoid forehead would ordinarily be. They are reclined against the rock face surrounding an apparatus of some sort approximately one point five metres in height.",
+    "word_count": 55
+  },
+  {
+    "index": 160,
+    "character": "DATA",
+    "text": "It is releasing what appear to be energy fragments, which are then ingested by the entities through the orifice. Perhaps some sort of nourishment.",
+    "word_count": 24
+  },
+  {
+    "index": 161,
+    "character": "DATA",
+    "text": "The upper portion of the apparatus seems to be a holding facility for the energy segments. There are hundreds, perhaps thousands of these fragments inside. I have resumed a northerly direction. There is no evidence yet of humans.",
+    "word_count": 38
+  },
+  {
+    "index": 162,
+    "character": "LAFORGE",
+    "text": "Okay, that's enough Data. Come on back now,",
+    "word_count": 8
+  },
+  {
+    "index": 163,
+    "character": "DATA",
+    "text": "I have encountered",
+    "word_count": 3
+  },
+  {
+    "index": 164,
+    "character": "DATA",
+    "text": "Another lifeform. An ophidian. It seems to be restricted by a forcefield.",
+    "word_count": 12
+  },
+  {
+    "index": 165,
+    "character": "DATA",
+    "text": "Two of the silver-grey entities are approaching it. They have released the forcefield.",
+    "word_count": 13
+  },
+  {
+    "index": 166,
+    "character": "DATA",
+    "text": "I am reading a temporal distortion of massive proportions. The ophidian is cap time-space continuum.",
+    "word_count": 15
+  },
+  {
+    "index": 167,
+    "character": "DATA",
+    "text": "Caught in the after effect. I am attempting",
+    "word_count": 8
+  },
+  {
+    "index": 168,
+    "character": "TROI",
+    "text": "Data!",
+    "word_count": 1
+  },
+  {
+    "index": 169,
+    "character": "RIKER",
+    "text": "Over here.",
+    "word_count": 2
+  },
+  {
+    "index": 170,
+    "character": "PICARD",
+    "text": "Commander Riker, report.",
+    "word_count": 3
+  },
+  {
+    "index": 171,
+    "character": "RIKER",
+    "text": "We've lost him.",
+    "word_count": 3
+  },
+  {
+    "index": 172,
+    "character": "DATA",
+    "text": "Excuse me. Pardon me. I am searching for two individuals with an ophidian. A snake.",
+    "word_count": 15
+  },
+  {
+    "index": 173,
+    "character": "MAN",
+    "text": "Frenchman.",
+    "word_count": 1
+  },
+  {
+    "index": 174,
+    "character": "BEGGAR",
+    "text": "Could you help out a Forty Niner? I fell down a shaft. I got blown up in a tunnel.",
+    "word_count": 19
+  },
+  {
+    "index": 175,
+    "character": "DATA",
+    "text": "That is unfortunate.",
+    "word_count": 3
+  },
+  {
+    "index": 176,
+    "character": "BEGGAR",
+    "text": "It is most unfortunate. I require large amounts of whiskey as a linament.",
+    "word_count": 13
+  },
+  {
+    "index": 177,
+    "character": "DATA",
+    "text": "I am sorry, but I have no whiskey to give you.",
+    "word_count": 11
+  },
+  {
+    "index": 178,
+    "character": "BEGGAR",
+    "text": "I'll take a dime.",
+    "word_count": 4
+  },
+  {
+    "index": 179,
+    "character": "DATA",
+    "text": "I am sorry, but I have no form of legal tender.",
+    "word_count": 11
+  },
+  {
+    "index": 180,
+    "character": "BEGGAR",
+    "text": "Well, we're in the same boat, huh? Well, this is my street. You'll have to go find one of your own.",
+    "word_count": 21
+  },
+  {
+    "index": 181,
+    "character": "DATA",
+    "text": "I would be happy to do so, but I am presently in need of information.",
+    "word_count": 15
+  },
+  {
+    "index": 182,
+    "character": "BEGGAR",
+    "text": "Stockbrokers are cheap as hell. Don't even bother to ask. Your best handout is from a young fella with his lady. You give him a chance to show her he's generous. Steer clear of sailors. Most likely you'll get a fist across the jaw for your trouble.",
+    "word_count": 47
+  },
+  {
+    "index": 183,
+    "character": "DATA",
+    "text": "Thank you for your advice, but I'm trying to find two individuals with a snake.",
+    "word_count": 15
+  },
+  {
+    "index": 184,
+    "character": "BEGGAR",
+    "text": "A snake? You're an odd fellow, aren't you? But just don't be too particular where you get your funds from.",
+    "word_count": 20
+  },
+  {
+    "index": 185,
+    "character": "DATA",
+    "text": "You are in need of medical attention. I will get a doctor.",
+    "word_count": 12
+  },
+  {
+    "index": 186,
+    "character": "BEGGAR",
+    "text": "No, no, no, it's too late for that. Could you help out a Forty Niner?",
+    "word_count": 15
+  },
+  {
+    "index": 187,
+    "character": "BELLBOY",
+    "text": "Thanks.",
+    "word_count": 1
+  },
+  {
+    "index": 188,
+    "character": "BELLBOY",
+    "text": "Hey, put it on Gentleman Jim. Knockout in the fifth.",
+    "word_count": 10
+  },
+  {
+    "index": 189,
+    "character": "MAN",
+    "text": "All right.",
+    "word_count": 2
+  },
+  {
+    "index": 190,
+    "character": "DATA",
+    "text": "Sir, I need temporary lodging.",
+    "word_count": 5
+  },
+  {
+    "index": 191,
+    "character": "BELLBOY",
+    "text": "Looks like the missus booted you out in the middle of the night.",
+    "word_count": 13
+  },
+  {
+    "index": 192,
+    "character": "DATA",
+    "text": "I understand the source of your misperception. However, this is not sleepware and I do not have a missus.",
+    "word_count": 19
+  },
+  {
+    "index": 193,
+    "character": "BELLBOY",
+    "text": "Well.",
+    "word_count": 1
+  },
+  {
+    "index": 194,
+    "character": "DATA",
+    "text": "I am a Frenchman.",
+    "word_count": 4
+  },
+  {
+    "index": 195,
+    "character": "BELLBOY",
+    "text": "Oh. Well, everybody's from somewhere. That doesn't matter at this hotel. It's six bits a day or four dollars a week.",
+    "word_count": 21
+  },
+  {
+    "index": 196,
+    "character": "DATA",
+    "text": "I have no money.",
+    "word_count": 4
+  },
+  {
+    "index": 197,
+    "character": "BELLBOY",
+    "text": "Well, now, that matters.",
+    "word_count": 4
+  },
+  {
+    "index": 198,
+    "character": "DATA",
+    "text": "But I am capable of performing significant tasks both mental and physical. Perhaps your hotel would offer me a job.",
+    "word_count": 20
+  },
+  {
+    "index": 199,
+    "character": "BELLBOY",
+    "text": "Geez, I don't know. We're pretty happy with the maid we've got. Cook's decent. Dishwasher's drunk all day, but at least he gets here on time. And there's me. I do everything else. Sorry. Lady Luck not with ya, tonight, Mister Lane? Poor fella. Hasn't filled a straight in five weeks.",
+    "word_count": 51
+  },
+  {
+    "index": 200,
+    "character": "DATA",
+    "text": "Poker?",
+    "word_count": 1
+  },
+  {
+    "index": 201,
+    "character": "GAMBLER",
+    "text": "Fold.",
+    "word_count": 1
+  },
+  {
+    "index": 202,
+    "character": "MAN",
+    "text": "Me too.",
+    "word_count": 2
+  },
+  {
+    "index": 203,
+    "character": "SEAMAN",
+    "text": "Go to blazes.",
+    "word_count": 3
+  },
+  {
+    "index": 204,
+    "character": "GAMBLER",
+    "text": "A poker face carved in marble.",
+    "word_count": 6
+  },
+  {
+    "index": 205,
+    "character": "DATA",
+    "text": "Excuse me, gentlemen.",
+    "word_count": 3
+  },
+  {
+    "index": 206,
+    "character": "SEAMAN",
+    "text": "What in hell do you want?",
+    "word_count": 6
+  },
+  {
+    "index": 207,
+    "character": "DATA",
+    "text": "I would like to join the game.",
+    "word_count": 7
+  },
+  {
+    "index": 208,
+    "character": "NATIVE",
+    "text": "Pale face.",
+    "word_count": 2
+  },
+  {
+    "index": 209,
+    "character": "SEAMAN",
+    "text": "I don't like Easterners, personally.",
+    "word_count": 5
+  },
+  {
+    "index": 210,
+    "character": "DATA",
+    "text": "I am a Frenchman.",
+    "word_count": 4
+  },
+  {
+    "index": 211,
+    "character": "GAMBLER",
+    "text": "Ah. Mes parents sont originaires de Bourgonais. Je suis ne a la New Orleans.",
+    "word_count": 14
+  },
+  {
+    "index": 212,
+    "character": "DATA",
+    "text": "Alors, nous sommes presque fr\u00e8res. Je suis heureux de vous connaitre.",
+    "word_count": 11
+  },
+  {
+    "index": 213,
+    "character": "GAMBLER",
+    "text": "Please, sir.",
+    "word_count": 2
+  },
+  {
+    "index": 214,
+    "character": "GAMBLER",
+    "text": "The game is poker. The deal is yours. The ante is four bits.",
+    "word_count": 13
+  },
+  {
+    "index": 215,
+    "character": "GAMBLER",
+    "text": "Family heirloom?",
+    "word_count": 2
+  },
+  {
+    "index": 216,
+    "character": "DATA",
+    "text": "In a manner of speaking. It is a crystalline composite of silicon, beryllium, Carbon seventy, and",
+    "word_count": 16
+  },
+  {
+    "index": 217,
+    "character": "SEAMAN",
+    "text": "Gold.",
+    "word_count": 1
+  },
+  {
+    "index": 218,
+    "character": "DATA",
+    "text": "Gold.",
+    "word_count": 1
+  },
+  {
+    "index": 219,
+    "character": "GAMBLER",
+    "text": "I'll give you three bucks for it.",
+    "word_count": 7
+  },
+  {
+    "index": 220,
+    "character": "DATA",
+    "text": "I accept.",
+    "word_count": 2
+  },
+  {
+    "index": 221,
+    "character": "BELLBOY",
+    "text": "Did you see the looks on their faces? I did everything I could not to laugh.",
+    "word_count": 16
+  },
+  {
+    "index": 222,
+    "character": "DATA",
+    "text": "To whom are you referring?",
+    "word_count": 5
+  },
+  {
+    "index": 223,
+    "character": "BELLBOY",
+    "text": "Frederick La Rouque and Joe Falling Hawk. Those guys are card sharks. Oh sure, they play easy at first not to scare off the marks, but you give them a little time, they'll bleed a man dry. Especially an out-of-towner like yourself..",
+    "word_count": 42
+  },
+  {
+    "index": 224,
+    "character": "DATA",
+    "text": "What was the source of your jocular reaction? What was it you found humorous?",
+    "word_count": 14
+  },
+  {
+    "index": 225,
+    "character": "BELLBOY",
+    "text": "Don't you see? They had you pegged for a sap. The clothes you got on, the way you talk, it's like you were born yesterday. You sure fooled them, though.",
+    "word_count": 30
+  },
+  {
+    "index": 226,
+    "character": "DATA",
+    "text": "It was not my intention to deceive.",
+    "word_count": 7
+  },
+  {
+    "index": 227,
+    "character": "BELLBOY",
+    "text": "Have it your way. This is the place. Breakfast is six to eight. Checkout's at noon when you're ready to leave.",
+    "word_count": 21
+  },
+  {
+    "index": 228,
+    "character": "DATA",
+    "text": "Thank you. It has been a pleasure.",
+    "word_count": 7
+  },
+  {
+    "index": 229,
+    "character": "DATA",
+    "text": "It would be advisable to monitor that cough. I have read that there is currently a cholera epidemic in San Francisco.",
+    "word_count": 21
+  },
+  {
+    "index": 230,
+    "character": "BELLBOY",
+    "text": "Never felt better.",
+    "word_count": 3
+  },
+  {
+    "index": 231,
+    "character": "DATA",
+    "text": "Of course. The gratuity. Thank you for your assistance.",
+    "word_count": 9
+  },
+  {
+    "index": 232,
+    "character": "BELLBOY",
+    "text": "A dollar? If there's anything you need. It can get lonely in San Francisco. You might want some company. I can introduce you to Lillian.",
+    "word_count": 25
+  },
+  {
+    "index": 233,
+    "character": "DATA",
+    "text": "I have no need for companionship. However I do require some supplies.",
+    "word_count": 12
+  },
+  {
+    "index": 234,
+    "character": "BELLBOY",
+    "text": "Anything you need. I can get it for you wholesale. I can get it for you less than wholesale if you don't ask me where it came from.",
+    "word_count": 28
+  },
+  {
+    "index": 235,
+    "character": "BELLBOY",
+    "text": "What do you need all this stuff for?",
+    "word_count": 8
+  },
+  {
+    "index": 236,
+    "character": "DATA",
+    "text": "I am an inventor.",
+    "word_count": 4
+  },
+  {
+    "index": 237,
+    "character": "BELLBOY",
+    "text": "No kidding. Well, this stuff's going to take a while. I'll have to go clear cross town. And it's not going to be cheap.",
+    "word_count": 24
+  },
+  {
+    "index": 238,
+    "character": "DATA",
+    "text": "Will this be enough?",
+    "word_count": 4
+  },
+  {
+    "index": 239,
+    "character": "BELLBOY",
+    "text": "More than enough.",
+    "word_count": 3
+  },
+  {
+    "index": 240,
+    "character": "DATA",
+    "text": "You may retain the surplus for yourself.",
+    "word_count": 7
+  },
+  {
+    "index": 241,
+    "character": "BELLBOY",
+    "text": "Keep the change?",
+    "word_count": 3
+  },
+  {
+    "index": 242,
+    "character": "DATA",
+    "text": "Exactly.",
+    "word_count": 1
+  },
+  {
+    "index": 243,
+    "character": "BELLBOY",
+    "text": "Done.",
+    "word_count": 1
+  },
+  {
+    "index": 244,
+    "character": "BEGGAR",
+    "text": "Help out a Forty Niner. Fell down a shaft. Forty Niner. Help me. Help me out.",
+    "word_count": 16
+  },
+  {
+    "index": 245,
+    "character": "BEGGAR",
+    "text": "No. No. Captain's log, supplemental. Close range sensor analysis has yielded no further trace of Commander Data. Despite the emotional repercussions among my crew, I must move this mission forward.",
+    "word_count": 30
+  },
+  {
+    "index": 246,
+    "character": "RIKER",
+    "text": "I'm not willing to accept that he's dead and just leave it at that.",
+    "word_count": 14
+  },
+  {
+    "index": 247,
+    "character": "PICARD",
+    "text": "We cannot make Mister Data our priority.",
+    "word_count": 7
+  },
+  {
+    "index": 248,
+    "character": "RIKER",
+    "text": "What is more important than Data?",
+    "word_count": 6
+  },
+  {
+    "index": 249,
+    "character": "TROI",
+    "text": "Look at what we have so far. Evidence that these aliens have been travelling back in time to Earth.",
+    "word_count": 19
+  },
+  {
+    "index": 250,
+    "character": "CRUSHER",
+    "text": "What if they're trying to undermine our history for some reason.",
+    "word_count": 11
+  },
+  {
+    "index": 251,
+    "character": "WORF",
+    "text": "Some kind of guerilla war?",
+    "word_count": 5
+  },
+  {
+    "index": 252,
+    "character": "PICARD",
+    "text": "We must assume that there is a threat, if not to us then to 19th century Earth. We have to determine what that threat may be. Mister La Forge, we have to find some way to communicate with these life forms.",
+    "word_count": 41
+  },
+  {
+    "index": 253,
+    "character": "LAFORGE",
+    "text": "It's not going to be easy to reproduce what Data did. We can create a contained subspace field, but we'd need an extraordinarily sensitive phase discriminator to get that point zero zero four variance.",
+    "word_count": 34
+  },
+  {
+    "index": 254,
+    "character": "PICARD",
+    "text": "Can you build one?",
+    "word_count": 4
+  },
+  {
+    "index": 255,
+    "character": "LAFORGE",
+    "text": "It won't be as good as Data's.",
+    "word_count": 7
+  },
+  {
+    "index": 256,
+    "character": "RIKER",
+    "text": "Will it be good enough?",
+    "word_count": 5
+  },
+  {
+    "index": 257,
+    "character": "LAFORGE",
+    "text": "I don't know. I can try. It's going to take some time though.",
+    "word_count": 13
+  },
+  {
+    "index": 258,
+    "character": "PICARD",
+    "text": "I don't want anyone else going in alone.",
+    "word_count": 8
+  },
+  {
+    "index": 259,
+    "character": "LAFORGE",
+    "text": "I can probably create a large enough subspace field to encompass everyone. But adjusting the phase inside the field, that's going to be the hard part.",
+    "word_count": 26
+  },
+  {
+    "index": 260,
+    "character": "PICARD",
+    "text": "Make it so.",
+    "word_count": 3
+  },
+  {
+    "index": 261,
+    "character": "RIKER",
+    "text": "We have to assume one thing, sir. Wherever Data may be, he's doing the same thing we are, which is trying to get to the bottom of this. He may have a better idea about what's going on than we do, so it might be in the best interests of this mission to find him.",
+    "word_count": 55
+  },
+  {
+    "index": 262,
+    "character": "PICARD",
+    "text": "Perhaps in the course of this investigation, we will. I hope so.",
+    "word_count": 12
+  },
+  {
+    "index": 263,
+    "character": "WORF",
+    "text": "If we find Commander Data, it may be our fate to die with him in the past. If our remains are in that cavern, they would have turned to dust long ago.",
+    "word_count": 32
+  },
+  {
+    "index": 264,
+    "character": "PICARD",
+    "text": "I'm afraid to interrupt.",
+    "word_count": 4
+  },
+  {
+    "index": 265,
+    "character": "GUINAN",
+    "text": "Captain, you didn't have to come all the way down here. I would've been more than happy to come up to you.",
+    "word_count": 22
+  },
+  {
+    "index": 266,
+    "character": "PICARD",
+    "text": "And miss all this? I haven't seen such a complex operation since the Academy lab final in exochemistry.",
+    "word_count": 18
+  },
+  {
+    "index": 267,
+    "character": "GUINAN",
+    "text": "It's a Tzartak aperitif. It's very, very touchy. The trick is to change the evaporation point of the main ingredient. You want the temperature where the liquid goes to vapour to be a half a degree below the body temperature of the customer. That way, when the liquid touches the tongue, it evaporates, and the flavour is carried entirely by the vapour. A few molecules off, the vapour point crashes, and poof! It's all gone. All of it.",
+    "word_count": 78
+  },
+  {
+    "index": 268,
+    "character": "PICARD",
+    "text": "What is it you wanted to see me about?",
+    "word_count": 9
+  },
+  {
+    "index": 269,
+    "character": "GUINAN",
+    "text": "I hear you're sending an away team down to the surface. Are you going?",
+    "word_count": 14
+  },
+  {
+    "index": 270,
+    "character": "PICARD",
+    "text": "Well, now, this is rather unusual for you to be curious about an away mission.",
+    "word_count": 15
+  },
+  {
+    "index": 271,
+    "character": "GUINAN",
+    "text": "Maybe it's an unusual away mission.",
+    "word_count": 6
+  },
+  {
+    "index": 272,
+    "character": "PICARD",
+    "text": "If you have something to say, I'm listening.",
+    "word_count": 8
+  },
+  {
+    "index": 273,
+    "character": "GUINAN",
+    "text": "Starfleet captains don't usually accompany away teams.",
+    "word_count": 7
+  },
+  {
+    "index": 274,
+    "character": "PICARD",
+    "text": "It's general policy.",
+    "word_count": 3
+  },
+  {
+    "index": 275,
+    "character": "GUINAN",
+    "text": "This time, you have to.",
+    "word_count": 5
+  },
+  {
+    "index": 276,
+    "character": "PICARD",
+    "text": "Why?",
+    "word_count": 1
+  },
+  {
+    "index": 277,
+    "character": "GUINAN",
+    "text": "You just do. Do you remember the first time we met?",
+    "word_count": 11
+  },
+  {
+    "index": 278,
+    "character": "PICARD",
+    "text": "Of course.",
+    "word_count": 2
+  },
+  {
+    "index": 279,
+    "character": "GUINAN",
+    "text": "Don't be so sure. I just mean, if you don't go on this mission, we'll never meet.",
+    "word_count": 17
+  },
+  {
+    "index": 280,
+    "character": "BELLBOY",
+    "text": "Sorry it took so long, Mister Data.",
+    "word_count": 7
+  },
+  {
+    "index": 281,
+    "character": "DATA",
+    "text": "Apology is not necessary.",
+    "word_count": 4
+  },
+  {
+    "index": 282,
+    "character": "DATA",
+    "text": "Ow.",
+    "word_count": 1
+  },
+  {
+    "index": 283,
+    "character": "BELLBOY",
+    "text": "Are you all right?",
+    "word_count": 4
+  },
+  {
+    "index": 284,
+    "character": "DATA",
+    "text": "I believe I have overexerted myself.",
+    "word_count": 6
+  },
+  {
+    "index": 285,
+    "character": "BELLBOY",
+    "text": "Yeah, I'll say. Did you get it working?",
+    "word_count": 8
+  },
+  {
+    "index": 286,
+    "character": "DATA",
+    "text": "Yes.",
+    "word_count": 1
+  },
+  {
+    "index": 287,
+    "character": "BELLBOY",
+    "text": "Whatever it is.",
+    "word_count": 3
+  },
+  {
+    "index": 288,
+    "character": "DATA",
+    "text": "This is for your trouble.",
+    "word_count": 5
+  },
+  {
+    "index": 289,
+    "character": "BELLBOY",
+    "text": "What are you going to do with the anvil?",
+    "word_count": 9
+  },
+  {
+    "index": 290,
+    "character": "DATA",
+    "text": "I require a low intensity magnetic field core. I believe the iron mass of the anvil will provide that.",
+    "word_count": 19
+  },
+  {
+    "index": 291,
+    "character": "BELLBOY",
+    "text": "What's it going to be when it's finished?",
+    "word_count": 8
+  },
+  {
+    "index": 292,
+    "character": "DATA",
+    "text": "What do you think it is going to be?",
+    "word_count": 9
+  },
+  {
+    "index": 293,
+    "character": "BELLBOY",
+    "text": "If I were to guess, maybe a new kind of motor for one of those horseless carriages.",
+    "word_count": 17
+  },
+  {
+    "index": 294,
+    "character": "DATA",
+    "text": "That is a good guess.",
+    "word_count": 5
+  },
+  {
+    "index": 295,
+    "character": "BELLBOY",
+    "text": "Hot damn. You really think there's money in those things?",
+    "word_count": 10
+  },
+  {
+    "index": 296,
+    "character": "DATA",
+    "text": "Perhaps.",
+    "word_count": 1
+  },
+  {
+    "index": 297,
+    "character": "BELLBOY",
+    "text": "Isn't that what makes America great?",
+    "word_count": 6
+  },
+  {
+    "index": 298,
+    "character": "DATA",
+    "text": "To what are you referring?",
+    "word_count": 5
+  },
+  {
+    "index": 299,
+    "character": "BELLBOY",
+    "text": "Well, a man rides into town in his pajamas, wins a grub stake at a poker table, turns it into a horseless carriage and makes a million bucks. That's America.",
+    "word_count": 30
+  },
+  {
+    "index": 300,
+    "character": "DATA",
+    "text": "I believe I have given you an erroneous impression.",
+    "word_count": 9
+  },
+  {
+    "index": 301,
+    "character": "BELLBOY",
+    "text": "You know, some day my ship's going to come in.",
+    "word_count": 10
+  },
+  {
+    "index": 302,
+    "character": "DATA",
+    "text": "You have a ship?",
+    "word_count": 4
+  },
+  {
+    "index": 303,
+    "character": "BELLBOY",
+    "text": "Oh yeah, and it's full of gold too. I'm just biding my time til it gets here, raising a stake any way I can. I've been a newsie, cut fish at a cannery. Heck, I've even been an oyster pirate.",
+    "word_count": 40
+  },
+  {
+    "index": 304,
+    "character": "DATA",
+    "text": "You have had a considerable spectrum of occupations.",
+    "word_count": 8
+  },
+  {
+    "index": 305,
+    "character": "BELLBOY",
+    "text": "Yeah, well, you can't stay in one place too long. I'm always looking for the angle, you know. Say, maybe you and I could go into business together, selling your horseless carriage and all. You invent them, I sell them. I can sell anybody anything. What do you say?",
+    "word_count": 49
+  },
+  {
+    "index": 306,
+    "character": "DATA",
+    "text": "I believe your plan is a bit premature.",
+    "word_count": 8
+  },
+  {
+    "index": 307,
+    "character": "BELLBOY",
+    "text": "Keep it in mind, though. I better get back. Oh, I forgot. I got you something at the bakery on Third.",
+    "word_count": 21
+  },
+  {
+    "index": 308,
+    "character": "DATA",
+    "text": "Thank you, Jack.",
+    "word_count": 3
+  },
+  {
+    "index": 309,
+    "character": "BELLBOY",
+    "text": "Oh, no, no, no. It's on me, partner.",
+    "word_count": 8
+  },
+  {
+    "index": 310,
+    "character": "CLEMENS",
+    "text": "The eminent scientist Alfred Russell Wallace has revived the theory that Earth is at the centre of the stellar universe. This distinguished natural philosopher has reaffirmed our planet as the only habitable globe in the heavens. A world, furthermore, constructed for the sole benefit of man. He's got a lot of folks excited about the notion.",
+    "word_count": 56
+  },
+  {
+    "index": 311,
+    "character": "GUINAN",
+    "text": "My dear Mister Clemens, why do I think you're not one of them?",
+    "word_count": 13
+  },
+  {
+    "index": 312,
+    "character": "CLEMENS",
+    "text": "Your suspicions, Madam Guinan, are undoubtedly based upon your keen observational skills. Now, if you'll permit me, I'll continue my character assassination unimpeded.",
+    "word_count": 23
+  },
+  {
+    "index": 313,
+    "character": "GUINAN",
+    "text": "My dear Mister Clemens, please do. Please do.",
+    "word_count": 8
+  },
+  {
+    "index": 314,
+    "character": "CLEMENS",
+    "text": "According to our best geologic estimate, the Earth is approximately one hundred million years of age. Perhaps it is less, perhaps more.",
+    "word_count": 22
+  },
+  {
+    "index": 315,
+    "character": "GUINAN",
+    "text": "Perhaps a great deal more.",
+    "word_count": 5
+  },
+  {
+    "index": 316,
+    "character": "CLEMENS",
+    "text": "Indeed. But regardless, it is ancient in the extreme. Now, geology also tells us that man himself has existed for but a microscopic fraction of those years. Curious, isn't it, that the world got by for such a great long while with no humans around to fill up space? I suppose Mister Wallace and his supporters would say that the Earth needed all that time to prepare itself for our illustrious arrival. Why, the oyster alone probably required fifteen million years to get it to come out just right.",
+    "word_count": 89
+  },
+  {
+    "index": 317,
+    "character": "GUINAN",
+    "text": "But if the Earth is not alone, and there are millions of inhabited planets in the heavens.",
+    "word_count": 17
+  },
+  {
+    "index": 318,
+    "character": "CLEMENS",
+    "text": "Quite my point. Man becomes a trivial creation, does he not? Lost in the vastness of the cosmic prairie, adrift on the deep ocean of time. A single one among countless others.",
+    "word_count": 32
+  },
+  {
+    "index": 319,
+    "character": "GUINAN",
+    "text": "Someone may argue that a diamond is still a diamond, even if it is one amongst millions. It still shines as brightly.",
+    "word_count": 22
+  },
+  {
+    "index": 320,
+    "character": "CLEMENS",
+    "text": "Someone might say that, dear lady, if someone thought that the human race was akin to a precious jewel. But this increasingly hypothetical someone would not be me.",
+    "word_count": 28
+  },
+  {
+    "index": 321,
+    "character": "DOORMAN",
+    "text": "Good afternoon, sir.",
+    "word_count": 3
+  },
+  {
+    "index": 322,
+    "character": "DATA",
+    "text": "Good afternoon. I would like to speak to Guinan.",
+    "word_count": 9
+  },
+  {
+    "index": 323,
+    "character": "DOORMAN",
+    "text": "And you are?",
+    "word_count": 3
+  },
+  {
+    "index": 324,
+    "character": "DATA",
+    "text": "Data.",
+    "word_count": 1
+  },
+  {
+    "index": 325,
+    "character": "DOORMAN",
+    "text": "Mister Data. Could it be under another name?",
+    "word_count": 8
+  },
+  {
+    "index": 326,
+    "character": "DATA",
+    "text": "No.",
+    "word_count": 1
+  },
+  {
+    "index": 327,
+    "character": "DOORMAN",
+    "text": "I can't seem to find your name on the guest list, sir.",
+    "word_count": 12
+  },
+  {
+    "index": 328,
+    "character": "DATA",
+    "text": "I am a personal friend.",
+    "word_count": 5
+  },
+  {
+    "index": 329,
+    "character": "DOORMAN",
+    "text": "Madam Guinan has discovered many personal friends since the newspaper announcement, but if your name is not on the guest list, there's nothing I can do.",
+    "word_count": 26
+  },
+  {
+    "index": 330,
+    "character": "DATA",
+    "text": "It is urgent that I speak to her.",
+    "word_count": 8
+  },
+  {
+    "index": 331,
+    "character": "DOORMAN",
+    "text": "Sir, unless you leave this house immediately, I will send for the police.",
+    "word_count": 13
+  },
+  {
+    "index": 332,
+    "character": "DATA",
+    "text": "That is an excellent idea. I will wait for them in there.",
+    "word_count": 12
+  },
+  {
+    "index": 333,
+    "character": "DOORMAN",
+    "text": "Sir, please, you can't go in there.",
+    "word_count": 7
+  },
+  {
+    "index": 334,
+    "character": "DATA",
+    "text": "Guinan! Excuse me. I must speak to you immediately.",
+    "word_count": 9
+  },
+  {
+    "index": 335,
+    "character": "DOORMAN",
+    "text": "Forgive me, madam. He just barged right in.",
+    "word_count": 8
+  },
+  {
+    "index": 336,
+    "character": "DATA",
+    "text": "I am sorry for the disruption, but he would not believe me when I told him we were friends.",
+    "word_count": 19
+  },
+  {
+    "index": 337,
+    "character": "GUINAN",
+    "text": "Do I know you, Mister?",
+    "word_count": 5
+  },
+  {
+    "index": 338,
+    "character": "DATA",
+    "text": "Data. Yes. We were on a ship together.",
+    "word_count": 8
+  },
+  {
+    "index": 339,
+    "character": "GUINAN",
+    "text": "I do so much travelling. What ship would that be?",
+    "word_count": 10
+  },
+  {
+    "index": 340,
+    "character": "DATA",
+    "text": "The Enterprise.",
+    "word_count": 2
+  },
+  {
+    "index": 341,
+    "character": "GUINAN",
+    "text": "Is that a clipper ship?",
+    "word_count": 5
+  },
+  {
+    "index": 342,
+    "character": "DATA",
+    "text": "It is a starship.",
+    "word_count": 4
+  },
+  {
+    "index": 343,
+    "character": "CLEMENS",
+    "text": "A starship? What registry would that be?",
+    "word_count": 7
+  },
+  {
+    "index": 344,
+    "character": "GUINAN",
+    "text": "Of course! Mister Data. Excuse us. We have so much to catch up on. Excuse us. How are you?",
+    "word_count": 19
+  },
+  {
+    "index": 345,
+    "character": "GUINAN",
+    "text": "What exactly are you?",
+    "word_count": 4
+  },
+  {
+    "index": 346,
+    "character": "DATA",
+    "text": "Android. Artificial life form.",
+    "word_count": 4
+  },
+  {
+    "index": 347,
+    "character": "GUINAN",
+    "text": "Ah. Did my father send you here? Because if he did, you must go back and tell him I've not done listening",
+    "word_count": 22
+  },
+  {
+    "index": 348,
+    "character": "DATA",
+    "text": "I was not sent by your father. Circumstances demand that I take you into my confidence. I require your assistance.",
+    "word_count": 20
+  },
+  {
+    "index": 349,
+    "character": "GUINAN",
+    "text": "Sorry.",
+    "word_count": 1
+  },
+  {
+    "index": 350,
+    "character": "DATA",
+    "text": "I am from the twenty fourth century, where you and I serve aboard a starship.",
+    "word_count": 15
+  },
+  {
+    "index": 351,
+    "character": "GUINAN",
+    "text": "And?",
+    "word_count": 1
+  },
+  {
+    "index": 352,
+    "character": "DATA",
+    "text": "Our ship encountered a species who appears to be threatening 19th century Earth. I investigated, and was inadvertently pulled into their temporal vortex. When I saw your photograph in the newspaper, I assumed you had joined me from the future, from the Enterprise. I knew your species was long-lived, but I did not realise you had visited Earth so long ago.",
+    "word_count": 61
+  },
+  {
+    "index": 353,
+    "character": "CLEMENS",
+    "text": "Eavesdropping is by no means a proper activity for a gentleman. Nonetheless, the deed is done. Captain's log, stardate 45965.3. An away team has beamed to the surface with a device which may enable them to phase-shift into the alien world.",
+    "word_count": 41
+  },
+  {
+    "index": 354,
+    "character": "LAFORGE",
+    "text": "Okay, Counsellor, right over there.",
+    "word_count": 5
+  },
+  {
+    "index": 355,
+    "character": "CRUSHER",
+    "text": "The triolic waves end right here.",
+    "word_count": 6
+  },
+  {
+    "index": 356,
+    "character": "RIKER",
+    "text": "Mister Worf?",
+    "word_count": 2
+  },
+  {
+    "index": 357,
+    "character": "LAFORGE",
+    "text": "Sir.",
+    "word_count": 1
+  },
+  {
+    "index": 358,
+    "character": "PICARD",
+    "text": "How soon will you be ready?",
+    "word_count": 6
+  },
+  {
+    "index": 359,
+    "character": "LAFORGE",
+    "text": "We're ready now, Captain. The subspace field is established.",
+    "word_count": 9
+  },
+  {
+    "index": 360,
+    "character": "RIKER",
+    "text": "I'd be more comfortable if you'd monitor our progress from the Bridge, Captain.",
+    "word_count": 13
+  },
+  {
+    "index": 361,
+    "character": "PICARD",
+    "text": "I have reason to believe that my presence on this mission is imperative.",
+    "word_count": 13
+  },
+  {
+    "index": 362,
+    "character": "RIKER",
+    "text": "Imperative?",
+    "word_count": 1
+  },
+  {
+    "index": 363,
+    "character": "PICARD",
+    "text": "Yes. Mister Worf, you will report back to the Bridge.",
+    "word_count": 10
+  },
+  {
+    "index": 364,
+    "character": "WORF",
+    "text": "Sir, as Chief of Security, my place is at your side.",
+    "word_count": 11
+  },
+  {
+    "index": 365,
+    "character": "PICARD",
+    "text": "The security of the Enterprise is of paramount importance, Mister Worf.",
+    "word_count": 11
+  },
+  {
+    "index": 366,
+    "character": "WORF",
+    "text": "Yes, sir. Worf to Enterprise.",
+    "word_count": 5
+  },
+  {
+    "index": 367,
+    "character": "CREWMAN",
+    "text": "Go ahead.",
+    "word_count": 2
+  },
+  {
+    "index": 368,
+    "character": "WORF",
+    "text": "Beam me up.",
+    "word_count": 3
+  },
+  {
+    "index": 369,
+    "character": "PICARD",
+    "text": "Proceed, Mister La Forge.",
+    "word_count": 4
+  },
+  {
+    "index": 370,
+    "character": "LAFORGE",
+    "text": "I've modified this tricorder to interface with the subspace generator. It should allow me to control the phase discrimination, assuming this is going to work at all. I need everyone within the field. Adjusting synchronic distortion. Point zero zero one. Point zero zero two. Point zero zero three. Point zero zero four.",
+    "word_count": 52
+  },
+  {
+    "index": 371,
+    "character": "PICARD",
+    "text": "If we can see them, why they can't see us?",
+    "word_count": 10
+  },
+  {
+    "index": 372,
+    "character": "LAFORGE",
+    "text": "The phase displacement might not bring us far enough into their perceptual range.",
+    "word_count": 13
+  },
+  {
+    "index": 373,
+    "character": "CRUSHER",
+    "text": "These strands appear to be biomagnetic. Variable flux. Possibly organic in origin.",
+    "word_count": 12
+  },
+  {
+    "index": 374,
+    "character": "PICARD",
+    "text": "A life form.",
+    "word_count": 3
+  },
+  {
+    "index": 375,
+    "character": "TROI",
+    "text": "No. There is no life here. What I have sensed is more like an imprint. An echo of the last moment of life. Human life. They all died in terror",
+    "word_count": 30
+  },
+  {
+    "index": 376,
+    "character": "RIKER",
+    "text": "My God. They're delivering more of them for the others to ingest.",
+    "word_count": 12
+  },
+  {
+    "index": 377,
+    "character": "TROI",
+    "text": "Look at what he's carrying. To Be Continued... <Back to the episode listing Star Trek \u00ae and related marks are trademarks of Paramount Skydance Corporation. Copyright \u00a9 1966, Present. The Star Trek web pages on this site are for educational and entertainment purposes only. All other copyrights property of their respective holders.",
+    "word_count": 52
+  }
+]
