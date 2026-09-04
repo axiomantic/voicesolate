@@ -35,7 +35,9 @@ def parse_args():
     parser.add_argument("--min-duration", type=float, default=5.0, help="Minimum clip duration in seconds (default: 5.0 to discard short utterances <= 5s, pass 0 to keep all)")
     parser.add_argument("--targets", nargs="+", default=["all"], help="Target model formats to prepare & train: 'all', 'piper', 'xtts', 'f5' (default: all)")
     parser.add_argument("--no-train", action="store_true", help="Prepare datasets only; skip model training / packaging")
-    parser.add_argument("--no-interactive", action="store_true", help="Skip interactive audition / TUI test at the end")
+    parser.add_argument("--gui", action="store_true", default=True, help="Launch modern Voice Studio GUI in browser at the end (default: True)")
+    parser.add_argument("--tui", action="store_true", help="Launch terminal TUI instead of Web GUI")
+    parser.add_argument("--no-interactive", action="store_true", help="Skip interactive audition / studio at the end")
     parser.add_argument("--no-enhance", action="store_true", help="Skip ML vocal isolation and super-resolution enhancement")
     parser.add_argument("--all-characters", action="store_true", help="Select all characters found in script")
 
@@ -318,14 +320,25 @@ def main():
                 for model_type, model_path in trained_models.items():
                     console.print(f"[bold green]✓ {model_type.upper()} model package created:[/bold green] {model_path}")
 
-                # Interactive Audition / TUI Test Loop
+                # Interactive Audition Studio (Modern GUI or Terminal TUI)
                 if not args.no_interactive:
-                    try:
-                        from .interactive_tester import InteractiveTester
-                        tester = InteractiveTester(char_dir)
-                        tester.run_tui()
-                    except Exception as e:
-                        console.print(f"[yellow]Interactive audition skipped or interrupted: {e}[/yellow]")
+                    if not args.tui:
+                        try:
+                            from .voice_studio_gui import VoiceStudioGUI
+                            gui = VoiceStudioGUI(char_dir)
+                            gui.launch(server_port=7860, inbrowser=True)
+                        except Exception as e:
+                            console.print(f"[yellow]Voice Studio GUI launch error: {e}. Falling back to terminal TUI...[/yellow]")
+                            from .interactive_tester import InteractiveTester
+                            tester = InteractiveTester(char_dir)
+                            tester.run_tui()
+                    else:
+                        try:
+                            from .interactive_tester import InteractiveTester
+                            tester = InteractiveTester(char_dir)
+                            tester.run_tui()
+                        except Exception as e:
+                            console.print(f"[yellow]Interactive audition skipped or interrupted: {e}[/yellow]")
 
 if __name__ == "__main__":
     main()
