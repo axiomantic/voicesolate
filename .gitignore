@@ -36,6 +36,8 @@ ENV/
 cache/audio/
 cache/stt/
 cache/subtitles/
+output
 output/
+output2/
 !cache/scripts/
 cache/scripts/*_dialogues.json

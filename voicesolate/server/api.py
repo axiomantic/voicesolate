@@ -77,21 +77,24 @@ class InstallEngineRequest(BaseModel):
 def get_system_status():
     return engine_service.get_system_status()
 
+def _find_character_dir(character_name: Optional[str], episode: Optional[str] = None) -> Optional[Path]:
+    if not character_name:
+        return None
+    out_root = Path("./output")
+    if not out_root.exists():
+        return None
+    if episode:
+        cand = out_root / episode / character_name
+        if cand.exists():
+            return cand
+    for ep in out_root.iterdir():
+        if ep.is_dir() and not ep.name.startswith(".") and (ep / character_name).exists():
+            return ep / character_name
+    return None
+
 @app.get("/api/v1/system/engines")
 def get_system_engines(character: Optional[str] = None, episode: Optional[str] = None):
-    char_dir = None
-    if character:
-        # Search output for character
-        out_root = Path("./output")
-        if episode:
-            cand = out_root / episode / character
-            if cand.exists():
-                char_dir = cand
-        if not char_dir:
-            for ep_dir in out_root.iterdir():
-                if ep_dir.is_dir() and (ep_dir / character).exists():
-                    char_dir = ep_dir / character
-                    break
+    char_dir = _find_character_dir(character, episode)
     return engine_service.get_engines_status(char_dir)
 
 @app.post("/api/v1/system/install_engine")
@@ -146,10 +149,18 @@ def list_episodes():
                 })
     return episodes
 
+def _find_episode_dir(episode_name: str) -> Optional[Path]:
+    for out_root in [Path("./output"), Path("./output2")]:
+        if out_root.exists():
+            cand = out_root / episode_name
+            if cand.exists() and cand.is_dir():
+                return cand
+    return None
+
 @app.get("/api/v1/episodes/{episode_name}")
 def get_episode_details(episode_name: str):
-    ep_dir = Path("./output") / episode_name
-    if not ep_dir.exists():
+    ep_dir = _find_episode_dir(episode_name)
+    if not ep_dir:
         raise HTTPException(status_code=404, detail=f"Episode {episode_name} not found.")
 
     manifest_file = ep_dir / "manifest.json"
@@ -180,7 +191,9 @@ def get_episode_details(episode_name: str):
 
 @app.get("/api/v1/episodes/{episode_name}/waveform")
 def get_episode_waveform(episode_name: str):
-    ep_dir = Path("./output") / episode_name
+    ep_dir = _find_episode_dir(episode_name)
+    if not ep_dir:
+        return {"points": [], "speech_spans": [], "duration": 0}
     manifest_file = ep_dir / "manifest.json"
     return generate_macro_waveform_from_manifest(manifest_file, num_points=1200)
 
@@ -188,19 +201,7 @@ def get_episode_waveform(episode_name: str):
 
 @app.get("/api/v1/characters/{character_name}/details")
 def get_character_details(character_name: str, episode: Optional[str] = None):
-    out_root = Path("./output")
-    char_dir = None
-    if episode:
-        cand = out_root / episode / character_name
-        if cand.exists():
-            char_dir = cand
-
-    if not char_dir:
-        for ep in out_root.iterdir():
-            if ep.is_dir() and (ep / character_name).exists():
-                char_dir = ep / character_name
-                break
-
+    char_dir = _find_character_dir(character_name, episode)
     if not char_dir:
         raise HTTPException(status_code=404, detail=f"Character {character_name} not found in output.")
 
@@ -220,62 +221,44 @@ def get_character_details(character_name: str, episode: Optional[str] = None):
         "dataset_stats": {
             "clip_count": len(piper_wavs),
             "piper_dataset_ready": (char_dir / "datasets" / "piper" / "metadata.csv").exists(),
-            "f5_ready": (char_dir / "datasets" / "f5tts" / "ref_audio" / "ref.wav").exists(),
-            "xtts_ready": (char_dir / "datasets" / "xtts" / "reference_audio").exists()
+            "xtts_dataset_ready": (char_dir / "datasets" / "xtts" / "metadata.csv").exists(),
+            "f5tts_dataset_ready": (char_dir / "datasets" / "f5tts" / "metadata.csv").exists()
         }
     }
 
-# ----------------- PIPELINE ACTIONS -----------------
+# ----------------- JOBS & BACKGROUND RUNNER -----------------
 
 @app.post("/api/v1/pipeline/scan")
-def trigger_scan(req: ScanRequest, background_tasks: BackgroundTasks):
+def scan_media(req: ScanRequest, background_tasks: BackgroundTasks):
     job = job_manager.create_job("scan", req.dict())
     background_tasks.add_task(run_scan_job, job.job_id, req.input_path, req.script_path, req.provider)
     return {"job_id": job.job_id, "status": "queued"}
 
 @app.post("/api/v1/pipeline/run")
-def trigger_pipeline(req: PipelineRequest, background_tasks: BackgroundTasks):
+def run_pipeline(req: PipelineRequest, background_tasks: BackgroundTasks):
     job = job_manager.create_job("pipeline", req.dict())
     background_tasks.add_task(run_pipeline_job, job.job_id, req.dict())
     return {"job_id": job.job_id, "status": "queued"}
 
-# ----------------- JOBS -----------------
-
-@app.get("/api/v1/jobs")
-def list_jobs():
-    return [j.to_dict() for j in sorted(job_manager.jobs.values(), key=lambda x: x.created_at, reverse=True)]
-
 @app.get("/api/v1/jobs/{job_id}")
-def get_job_status(job_id: str):
+def get_job(job_id: str):
     job = job_manager.get_job(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found.")
+        raise HTTPException(status_code=404, detail="Job not found")
     return job.to_dict()
 
 @app.post("/api/v1/jobs/{job_id}/cancel")
 def cancel_job(job_id: str):
     success = job_manager.cancel_job(job_id)
     if not success:
-        raise HTTPException(status_code=400, detail="Cannot cancel job (not running or doesn't exist).")
+        raise HTTPException(status_code=404, detail="Job not found or already terminated")
     return {"job_id": job_id, "status": "cancelled"}
 
 # ----------------- SYNTHESIS -----------------
 
 @app.post("/api/v1/synthesize")
 def synthesize_speech(req: SynthesizeRequest):
-    out_root = Path("./output")
-    char_dir = None
-    if req.episode_name:
-        cand = out_root / req.episode_name / req.character_name
-        if cand.exists():
-            char_dir = cand
-
-    if not char_dir:
-        for ep in out_root.iterdir():
-            if ep.is_dir() and (ep / req.character_name).exists():
-                char_dir = ep / req.character_name
-                break
-
+    char_dir = _find_character_dir(req.character_name, req.episode_name)
     if not char_dir:
         raise HTTPException(status_code=404, detail=f"Character directory for '{req.character_name}' not found.")
 

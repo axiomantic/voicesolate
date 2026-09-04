@@ -32,23 +32,37 @@ class VoicesolateApp {
     }
   }
 
-  setupTabs() {
+  switchTab(targetTab) {
     const tabBtns = document.querySelectorAll(".tab-btn");
     const tabPanes = document.querySelectorAll(".tab-pane");
 
+    tabBtns.forEach(b => {
+      if (b.getAttribute("data-tab") === targetTab) {
+        b.classList.add("active");
+      } else {
+        b.classList.remove("active");
+      }
+    });
+
+    tabPanes.forEach(p => {
+      if (p.id === targetTab) {
+        p.classList.add("active");
+      } else {
+        p.classList.remove("active");
+      }
+    });
+
+    if (targetTab === "tab-radar" && this.radar) {
+      setTimeout(() => this.radar.resize(), 50);
+    }
+  }
+
+  setupTabs() {
+    const tabBtns = document.querySelectorAll(".tab-btn");
     tabBtns.forEach(btn => {
       btn.addEventListener("click", () => {
         const targetTab = btn.getAttribute("data-tab");
-        tabBtns.forEach(b => b.classList.remove("active"));
-        tabPanes.forEach(p => p.classList.remove("active"));
-
-        btn.classList.add("active");
-        const pane = document.getElementById(targetTab);
-        if (pane) pane.classList.add("active");
-
-        if (targetTab === "tab-radar" && this.radar) {
-          setTimeout(() => this.radar.resize(), 50);
-        }
+        this.switchTab(targetTab);
       });
     });
   }
@@ -429,9 +443,7 @@ class VoicesolateApp {
               enhance: true,
               targets: ["all"]
             });
-            // Close modal if open
-            const modal = document.getElementById("ingestMediaModal");
-            if (modal) modal.classList.remove("open");
+            this.switchTab("tab-radar");
           } catch (err) {
             alert("Extraction failed: " + err.message);
             btn.disabled = false;
@@ -443,40 +455,16 @@ class VoicesolateApp {
       container.style.display = "flex";
     };
 
-    renderTable("modalCharactersTbody", "modalDiscoveredContainer");
     renderTable("pipelineCharactersTbody", "pipelineDiscoveredContainer");
   }
 
   setupEventListeners() {
-    // Ingest Modal Open & Close
-    const openModalBtn = document.getElementById("openIngestModalBtn");
-    const closeModalBtn = document.getElementById("closeIngestModalBtn");
-    const closeFooterBtn = document.getElementById("modalCloseFooterBtn");
-    const ingestModal = document.getElementById("ingestMediaModal");
-
-    if (openModalBtn && ingestModal) {
-      openModalBtn.addEventListener("click", () => {
-        ingestModal.classList.add("open");
-      });
-    }
-
-    const closeModal = () => {
-      if (ingestModal) ingestModal.classList.remove("open");
-    };
-    if (closeModalBtn) closeModalBtn.addEventListener("click", closeModal);
-    if (closeFooterBtn) closeFooterBtn.addEventListener("click", closeModal);
-
     // Preset Chips Click Handling
     document.querySelectorAll(".preset-chip").forEach(chip => {
       chip.addEventListener("click", () => {
         const p = chip.getAttribute("data-path");
         const s = chip.getAttribute("data-script");
         const c = chip.getAttribute("data-char");
-
-        const mInput = document.getElementById("modalInputPath");
-        const mScript = document.getElementById("modalScriptPath");
-        if (mInput && p) mInput.value = p;
-        if (mScript && s) mScript.value = s;
 
         const pInput = document.getElementById("pipelineInputPath");
         const pScript = document.getElementById("pipelineScriptPath");
@@ -493,31 +481,6 @@ class VoicesolateApp {
       cancelBtn.addEventListener("click", async () => {
         if (this.activeJobId) {
           await api.cancelJob(this.activeJobId);
-        }
-      });
-    }
-
-    // Modal Scan Button
-    const modalScanBtn = document.getElementById("modalScanBtn");
-    const modalStatusText = document.getElementById("modalScanStatusText");
-    if (modalScanBtn) {
-      modalScanBtn.addEventListener("click", async () => {
-        const inputPath = document.getElementById("modalInputPath").value.trim();
-        const scriptPath = document.getElementById("modalScriptPath").value.trim();
-        const provider = document.getElementById("modalProviderSelect").value;
-        if (!inputPath) {
-          alert("Please enter a media file path or remote SFTP URL.");
-          return;
-        }
-        if (modalStatusText) modalStatusText.innerText = "⏳ Scanning media stream...";
-        modalScanBtn.disabled = true;
-        try {
-          await api.scanMedia(inputPath, scriptPath || null, provider || null);
-        } catch (err) {
-          if (modalStatusText) modalStatusText.innerText = `❌ Error: ${err.message}`;
-          alert("Scan failed: " + err.message);
-        } finally {
-          modalScanBtn.disabled = false;
         }
       });
     }
@@ -570,6 +533,7 @@ class VoicesolateApp {
             enhance: true,
             targets: ["all"]
           });
+          this.switchTab("tab-radar");
         } catch (err) {
           alert("Extraction trigger failed: " + err.message);
         }

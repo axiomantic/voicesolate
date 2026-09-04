@@ -42,27 +42,26 @@
           <option value="">Select character...</option>
         </select>
       </div>
-
-      <button class="btn btn-primary btn-sm" id="openIngestModalBtn" style="gap:6px; padding:6px 14px; font-weight:600;">
-        <span>➕</span>
-        <span>Ingest Media</span>
-      </button>
     </div>
   </header>
 
-  <!-- Stage Navigation Tabs in Sequential Pipeline Order -->
+  <!-- Sequential Pipeline Stage Tabs -->
   <nav class="tabs-nav">
-    <button class="tab-btn active" data-tab="tab-radar">
+    <button class="tab-btn active" data-tab="tab-ingestion">
+      <span>🛰️</span>
+      <span>1. Media Ingestion &amp; Discovery</span>
+    </button>
+    <button class="tab-btn" data-tab="tab-radar">
       <span>🌊</span>
-      <span>1. Divide-and-Conquer Audio Radar</span>
+      <span>2. Divide-and-Conquer Audio Radar</span>
     </button>
     <button class="tab-btn" data-tab="tab-engines">
       <span>🧬</span>
-      <span>2. Datasets &amp; Voice Engines</span>
+      <span>3. Datasets &amp; Voice Engines</span>
     </button>
     <button class="tab-btn" data-tab="tab-studio">
       <span>🎙️</span>
-      <span>3. Voice Synthesis Studio</span>
+      <span>4. Voice Synthesis Studio</span>
     </button>
   </nav>
 
@@ -85,13 +84,11 @@
     </div>
   </div>
 
-  <!-- Main Pipeline Stages -->
+  <!-- Main Pipeline Content Panes -->
   <main class="main-content">
 
-    <!-- STAGE 1: DIVIDE-AND-CONQUER AUDIO RADAR & INGESTION -->
-    <section id="tab-radar" class="tab-pane active">
-      
-      <!-- Ingestion & Source Card -->
+    <!-- STAGE 1: MEDIA INGESTION & SCRIPT DISCOVERY -->
+    <section id="tab-ingestion" class="tab-pane active">
       <div class="card">
         <div class="card-header">
           <div>
@@ -100,7 +97,7 @@
           </div>
         </div>
 
-        <div style="display:flex; flex-direction:column; gap:16px;">
+        <div style="display:flex; flex-direction:column; gap:20px;">
           <!-- Quick Preset Chips -->
           <div>
             <label class="form-label">Recent / Preset Media Sources:</label>
@@ -158,11 +155,11 @@
           </div>
 
           <!-- Discovered Character Dialogue Table -->
-          <div id="pipelineDiscoveredContainer" style="display:none; flex-direction:column; gap:12px; margin-top:10px;">
+          <div id="pipelineDiscoveredContainer" style="display:none; flex-direction:column; gap:12px; margin-top:8px;">
             <h4 style="font-size:13px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">
               Discovered Speaking Characters in Media
             </h4>
-            <div style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 8px;">
+            <div style="max-height: 320px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 8px;">
               <table class="data-table" id="pipelineCharactersTable">
                 <thead>
                   <tr>
@@ -179,8 +176,10 @@
           </div>
         </div>
       </div>
+    </section>
 
-      <!-- Waveform Radar Card -->
+    <!-- STAGE 2: DIVIDE-AND-CONQUER AUDIO RADAR -->
+    <section id="tab-radar" class="tab-pane">
       <div class="card">
         <div class="card-header">
           <div>
@@ -243,7 +242,7 @@
       </div>
     </section>
 
-    <!-- STAGE 2: DATASETS & ENGINES -->
+    <!-- STAGE 3: DATASETS & ENGINES -->
     <section id="tab-engines" class="tab-pane">
       <div class="card">
         <div class="card-header">
@@ -259,7 +258,7 @@
       </div>
     </section>
 
-    <!-- STAGE 3: VOICE SYNTHESIS STUDIO -->
+    <!-- STAGE 4: VOICE SYNTHESIS STUDIO -->
     <section id="tab-studio" class="tab-pane">
       <div class="card">
         <div class="card-header">
@@ -343,93 +342,6 @@
     </section>
 
   </main>
-
-  <!-- Ingest Media Popup Modal -->
-  <div class="modal-backdrop" id="ingestMediaModal">
-    <div class="modal-dialog">
-      <div class="modal-header">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <span style="font-size:20px;">🛰️</span>
-          <h3 style="font-size:16px; font-weight:600; color:#fff;">Ingest Media Source</h3>
-          <span class="brand-badge">Zero-Download SFTP / Local</span>
-        </div>
-        <button class="close-btn" id="closeIngestModalBtn">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div style="font-size:13px; color:var(--text-muted); line-height:1.5;">
-          Enter a remote <strong>SFTP / SSH URL</strong> (Voicesolate seeks discrete center-channel audio directly over the wire without downloading whole multi-gigabyte video files) or a <strong>local file path</strong>.
-        </div>
-
-        <!-- Preset Example Chips -->
-        <div>
-          <label class="form-label">Recent / Preset Media Sources:</label>
-          <div class="preset-chips-row">
-            <button type="button" class="preset-chip" data-path="sftp://elijah@flanopticon.lan/mnt/nas/media/downloads/complete/TV Shows/www.UIndex.org    -    Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune/Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune.mkv" data-script="s06e01" data-char="CLEMENS">
-              ⚡ Remote S06E01 Times Arrow Part 2 (flanopticon.lan)
-            </button>
-            <button type="button" class="preset-chip" data-path="sftp://elijah@flanopticon.lan/mnt/nas/media/downloads/complete/TV Shows/Star Trek The Next Generation S05E26 Times Arrow 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune.mkv" data-script="s05e26" data-char="CLEMENS">
-              ⚡ Remote S05E26 Times Arrow Part 1 (flanopticon.lan)
-            </button>
-            <button type="button" class="preset-chip" data-path="./output/Star_Trek_The_Next_Generation_S06E01_Times_Arrow_Part_2_1080/CLEMENS/raw" data-script="s06e01" data-char="CLEMENS">
-              📂 Local Sample Clips
-            </button>
-          </div>
-        </div>
-
-        <!-- Media Path Input -->
-        <div class="form-group">
-          <label class="form-label" for="modalInputPath">Media File Path or SFTP URL</label>
-          <input type="text" id="modalInputPath" class="form-input" style="font-family:var(--font-mono); font-size:13px;" placeholder="sftp://user@host/path/to/video.mkv  or  /path/to/local_video.mkv" value="sftp://elijah@flanopticon.lan/mnt/nas/media/downloads/complete/TV Shows/www.UIndex.org    -    Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune/Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune.mkv">
-        </div>
-
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label" for="modalScriptPath">Script Identifier or Subtitle Path</label>
-            <input type="text" id="modalScriptPath" class="form-input" placeholder="e.g. s06e01 or auto-detect" value="s06e01">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="modalProviderSelect">Script Provider</label>
-            <select id="modalProviderSelect" class="form-select">
-              <option value="startrek">Star Trek Script Archive (Automatic)</option>
-              <option value="generic">Generic SRT / Subtitle Only</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Scan Action & Discovered Roster -->
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <button class="btn btn-secondary" id="modalScanBtn" style="padding:10px 18px;">
-            <span>🔍</span>
-            <span>Scan &amp; Discover Speaking Characters</span>
-          </button>
-          <span id="modalScanStatusText" style="font-size:12px; color:var(--text-dim); font-family:var(--font-mono);">Ready to inspect</span>
-        </div>
-
-        <div id="modalDiscoveredContainer" style="display:none; flex-direction:column; gap:12px;">
-          <h4 style="font-size:13px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">
-            Discovered Character Dialogue Roster
-          </h4>
-          <div style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 8px;">
-            <table class="data-table" id="modalCharactersTable">
-              <thead>
-                <tr>
-                  <th>Character</th>
-                  <th>Dialogue Lines</th>
-                  <th>Est. Duration</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="modalCharactersTbody">
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="modalCloseFooterBtn">Close</button>
-      </div>
-    </div>
-  </div>
 
   <script type="module" src="/static/js/app.js"></script>
 </body>
