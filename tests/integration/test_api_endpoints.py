@@ -1,3 +1,4 @@
+import re
 import pytest
 from starlette.testclient import TestClient
 from voicesolate.server.api import app
@@ -8,43 +9,83 @@ def client():
 
 @pytest.mark.integration
 class TestApiEndpoints:
-    def test_system_status(self, client: TestClient):
+    def test_system_status_contract(self, client: TestClient):
         response = client.get("/api/v1/system/status")
         assert response.status_code == 200
         data = response.json()
-        assert "os" in data
-        assert "device" in data
-        assert "python_version" in data
 
-    def test_system_engines(self, client: TestClient):
+        # Contract assertion: check types and valid ranges, not just presence
+        assert data["os"] in ("darwin", "linux", "win32")
+        assert data["device"] in ("mps", "cuda", "cpu")
+        assert re.match(r"^3\.\d+\.\d+", data["python_version"])
+        assert re.match(r"^\d+\.\d+", data["torch_version"])
+
+    def test_system_engines_complete_schema(self, client: TestClient):
         response = client.get("/api/v1/system/engines")
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
+        assert len(data) >= 3
+
+        required_keys = {"id", "name", "architecture", "installed", "trained", "ready"}
+        for eng in data:
+            assert required_keys.issubset(eng.keys()), f"Missing schema keys in engine: {eng}"
+            assert isinstance(eng["installed"], bool)
+            assert isinstance(eng["trained"], bool)
+            assert isinstance(eng["ready"], bool)
+            assert len(eng["name"]) > 0
+
         engine_ids = [e["id"] for e in data]
         assert "f5-tts" in engine_ids
         assert "piper" in engine_ids
         assert "xtts-v2" in engine_ids
 
-    def test_detect_script_endpoint(self, client: TestClient):
+    def test_detect_script_endpoint_and_negative_control(self, client: TestClient):
+        # 1. Positive case
         response = client.get("/api/v1/scripts/detect?filename=Star_Trek_The_Next_Generation_S06E01_Times_Arrow.mkv")
         assert response.status_code == 200
         data = response.json()
         assert data["detected_episode"] == "s06e01"
-        assert "characters" in data
         assert isinstance(data["characters"], list)
+        assert len(data["characters"]) > 0
 
-    def test_episodes_list_endpoint(self, client: TestClient):
+        first_char = data["characters"][0]
+        assert "name" in first_char
+        assert "lines" in first_char
+        assert isinstance(first_char["lines"], int)
+        assert first_char["lines"] > 0
+
+        # 2. Negative control: Missing required parameter returns 422
+        bad_response = client.get("/api/v1/scripts/detect")
+        assert bad_response.status_code == 422
+
+    def test_episodes_list_endpoint_contract(self, client: TestClient):
         response = client.get("/api/v1/episodes")
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
+        for ep in data:
+            assert "id" in ep
+            assert "name" in ep
+            assert "clips_count" in ep
+            assert isinstance(ep["clips_count"], int)
 
-    def test_character_details_endpoint(self, client: TestClient):
+    def test_character_details_endpoint_and_negative_control(self, client: TestClient):
+        # 1. Known character
         response = client.get("/api/v1/characters/CLEMENS/details")
         assert response.status_code == 200
         data = response.json()
         assert data["character_name"] == "CLEMENS"
-        assert "engines" in data
-        assert "dataset_stats" in data
-        assert "cached_syntheses" in data
+        assert isinstance(data["engines"], list)
+        assert isinstance(data["dataset_stats"], dict)
+        assert "clip_count" in data["dataset_stats"]
+        assert isinstance(data["dataset_stats"]["clip_count"], int)
+        assert isinstance(data["cached_syntheses"], list)
+
+        # 2. Negative control: Nonexistent character must return 200 with empty stats, not crash with 500
+        ghost_res = client.get("/api/v1/characters/NONEXISTENT_GHOST_CHARACTER_999/details")
+        assert ghost_res.status_code == 200
+        ghost_data = ghost_res.json()
+        assert ghost_data["character_name"] == "NONEXISTENT_GHOST_CHARACTER_999"
+        assert ghost_data["dataset_stats"]["clip_count"] == 0
+        assert ghost_data["quotes"] == []

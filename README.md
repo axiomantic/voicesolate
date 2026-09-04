@@ -8,7 +8,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.2+-EE4C2C.svg?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Acceleration](https://img.shields.io/badge/Hardware-MPS%20%2F%20CUDA-76B900.svg)](https://developer.apple.com/metal/pytorch/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 26 Passing](https://img.shields.io/badge/tests-26%20passing-brightgreen.svg)](tests/)
+[![Tests: 28 Passing](https://img.shields.io/badge/tests-28%20passing-brightgreen.svg)](tests/)
 
 **Transform any movie, TV episode, or audio mix into clean, production-ready AI voice clones in four automated steps.**
 
