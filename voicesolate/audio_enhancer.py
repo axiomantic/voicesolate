@@ -5,8 +5,11 @@ import torch
 import torchaudio
 import soundfile as sf
 import numpy as np
+import threading
 from pathlib import Path
 from typing import Optional, Any
+
+_DEMUCS_LOCK = threading.RLock()
 
 class AudioEnhancer:
     """
@@ -30,17 +33,18 @@ class AudioEnhancer:
 
     def _get_demucs_model(self):
         """Lazy loads HTDemucs on GPU/MPS."""
-        if self._demucs_model is None:
-            try:
-                from demucs.pretrained import get_model
-                model = get_model("htdemucs")
-                model.to(self.device)
-                model.eval()
-                self._demucs_model = model
-                self._vocal_idx = model.sources.index("vocals")
-            except Exception as e:
-                print(f"Warning: Failed to load Demucs model: {e}")
-        return self._demucs_model
+        with _DEMUCS_LOCK:
+            if self._demucs_model is None:
+                try:
+                    from demucs.pretrained import get_model
+                    model = get_model("htdemucs")
+                    model.to(self.device)
+                    model.eval()
+                    self._demucs_model = model
+                    self._vocal_idx = model.sources.index("vocals")
+                except Exception as e:
+                    print(f"Warning: Failed to load Demucs model: {e}")
+            return self._demucs_model
 
     def clean_and_enhance_file(self, input_wav: str, output_wav: str, media_key: Optional[str] = None, timecode_str: Optional[str] = None) -> str:
         """
@@ -109,11 +113,11 @@ class AudioEnhancer:
                 wav = resampler(wav)
                 sr = model.samplerate
 
-            wav_tensor = wav.to(self.device)
-            with torch.no_grad():
-                sources = apply_model(model, wav_tensor[None], device=self.device, shifts=2, overlap=0.25, progress=False)[0]
-
-            vocal_stem = sources[self._vocal_idx].cpu()
+            with _DEMUCS_LOCK:
+                wav_tensor = wav.to(self.device)
+                with torch.no_grad():
+                    sources = apply_model(model, wav_tensor[None], device=self.device, shifts=2, overlap=0.25, progress=False)[0]
+                vocal_stem = sources[self._vocal_idx].cpu()
             vocal_mono = vocal_stem.mean(dim=0, keepdim=True)
 
             resample_48k = torchaudio.transforms.Resample(sr, 48000)

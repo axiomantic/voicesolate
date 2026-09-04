@@ -526,12 +526,19 @@ class VoicesolateWizardApp {
           if (sttSnippet) { sttSnippet.innerText = "Awaiting extraction start..."; }
           if (sttTime) { sttTime.innerText = "--:--"; }
 
-          const demucsBadge = document.getElementById("demucsBadge");
-          const demucsSnippet = document.getElementById("demucsSnippet");
-          const demucsQueue = document.getElementById("demucsQueueCount");
-          if (demucsBadge) { demucsBadge.className = "worker-badge idle"; demucsBadge.innerText = "idle"; }
-          if (demucsSnippet) { demucsSnippet.innerText = "Queue empty"; }
-          if (demucsQueue) { demucsQueue.innerText = "0 clips pending"; }
+          const demucsWorkersCount = parseInt(document.getElementById("step2DemucsWorkers")?.value) || 2;
+          const demucsContainer = document.getElementById("enhancementWorkersContainer");
+          if (demucsContainer) {
+            demucsContainer.innerHTML = "";
+            for (let i = 1; i <= demucsWorkersCount; i++) {
+              this.updateEnhancementWorkerUI({
+                worker_id: `worker-demucs-${i}`,
+                state: "idle",
+                snippet: "Queue empty",
+                queue_count: 0
+              });
+            }
+          }
 
           const sttList = document.getElementById("sttQueueItemsList");
           const demucsList = document.getElementById("demucsQueueItemsList");
@@ -572,6 +579,25 @@ class VoicesolateWizardApp {
 
     if (startBtn) {
       startBtn.addEventListener("click", () => this.startAudioSearch());
+    }
+
+    const demucsWorkersInput = document.getElementById("step2DemucsWorkers");
+    if (demucsWorkersInput) {
+      demucsWorkersInput.addEventListener("input", () => {
+        const count = Math.max(1, Math.min(8, parseInt(demucsWorkersInput.value) || 2));
+        const demucsContainer = document.getElementById("enhancementWorkersContainer");
+        if (demucsContainer) {
+          demucsContainer.innerHTML = "";
+          for (let i = 1; i <= count; i++) {
+            this.updateEnhancementWorkerUI({
+              worker_id: `worker-demucs-${i}`,
+              state: "idle",
+              snippet: "Queue empty",
+              queue_count: 0
+            });
+          }
+        }
+      });
     }
 
     if (nextBtn) {
@@ -702,12 +728,21 @@ class VoicesolateWizardApp {
     if (sttSnippet) { sttSnippet.innerText = "Initializing divide-and-conquer speech search..."; }
     if (sttTime) { sttTime.innerText = "Timeline: 0:00..."; }
 
-    const demucsBadge = document.getElementById("demucsBadge");
-    const demucsSnippet = document.getElementById("demucsSnippet");
-    const demucsQueue = document.getElementById("demucsQueueCount");
-    if (demucsBadge) { demucsBadge.className = "worker-badge idle"; demucsBadge.innerText = "queued"; }
-    if (demucsSnippet) { demucsSnippet.innerText = "Waiting for alignment matches..."; }
-    if (demucsQueue) { demucsQueue.innerText = "Queue waiting"; }
+    const demucsWorkersInput = document.getElementById("step2DemucsWorkers");
+    const demucsWorkers = demucsWorkersInput ? Math.max(1, Math.min(8, parseInt(demucsWorkersInput.value) || 2)) : 2;
+
+    const demucsContainer = document.getElementById("enhancementWorkersContainer");
+    if (demucsContainer) {
+      demucsContainer.innerHTML = "";
+      for (let i = 1; i <= demucsWorkers; i++) {
+        this.updateEnhancementWorkerUI({
+          worker_id: `worker-demucs-${i}`,
+          state: "idle",
+          snippet: "Waiting for alignment matches...",
+          queue_count: 0
+        });
+      }
+    }
 
     const sttList = document.getElementById("sttQueueItemsList");
     const demucsList = document.getElementById("demucsQueueItemsList");
@@ -735,6 +770,7 @@ class VoicesolateWizardApp {
         characters: [this.selectedCharacter],
         min_duration: minDuration,
         similarity_threshold: similarityThreshold,
+        demucs_workers: demucsWorkers,
         enhance: enhance,
         no_cache_stt: noCacheStt,
         no_cache_align: noCacheAlign,
@@ -1212,19 +1248,7 @@ class VoicesolateWizardApp {
 
     if (worker.worker_id.startsWith("worker-demucs") || worker.worker_id === "worker-demucs-1") {
       // Stage B: Demucs Enhancement worker
-      const badge = document.getElementById("demucsBadge");
-      const snippet = document.getElementById("demucsSnippet");
-      const queueCount = document.getElementById("demucsQueueCount");
-      if (badge) {
-        badge.className = `worker-badge ${worker.state}`;
-        badge.innerText = worker.state;
-      }
-      if (snippet) {
-        snippet.innerText = worker.snippet || "Isolating vocal stem...";
-      }
-      if (queueCount && worker.queue_count !== undefined && worker.queue_count !== null) {
-        queueCount.innerText = `${worker.queue_count} clips pending`;
-      }
+      this.updateEnhancementWorkerUI(worker);
       if (worker.queue_items) {
         this.renderStageBQueueItems(worker.queue_items);
       }
@@ -1533,6 +1557,48 @@ class VoicesolateWizardApp {
     if (timeEl && worker.chunk_start !== undefined) {
       if (worker.chunk_end > worker.chunk_start) {
         timeEl.innerText = `Timeline: ${this.formatTime(worker.chunk_start)} - ${this.formatTime(worker.chunk_end)}`;
+      } else {
+        timeEl.innerText = "";
+      }
+    }
+  }
+
+  updateEnhancementWorkerUI(worker) {
+    const container = document.getElementById("enhancementWorkersContainer");
+    if (!container) return;
+
+    let card = document.getElementById(`demucsWorkerCard-${worker.worker_id}`);
+    if (!card) {
+      card = document.createElement("div");
+      card.className = "worker-card";
+      card.id = `demucsWorkerCard-${worker.worker_id}`;
+      card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-weight:600; color:#fff;">${worker.worker_id}</span>
+          <span class="worker-badge ${worker.state}" id="demucsWorkerBadge-${worker.worker_id}">${worker.state}</span>
+        </div>
+        <div style="font-size:12px; color:var(--text-muted);" id="demucsWorkerSnippet-${worker.worker_id}"></div>
+        <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);" id="demucsWorkerTime-${worker.worker_id}"></div>
+      `;
+      container.appendChild(card);
+    }
+
+    const badge = document.getElementById(`demucsWorkerBadge-${worker.worker_id}`);
+    const snippet = document.getElementById(`demucsWorkerSnippet-${worker.worker_id}`);
+    const timeEl = document.getElementById(`demucsWorkerTime-${worker.worker_id}`);
+
+    if (badge) {
+      badge.className = `worker-badge ${worker.state}`;
+      badge.innerText = worker.state;
+    }
+    if (snippet) {
+      snippet.innerText = worker.snippet || (worker.state === "enhancing" ? "Isolating vocal stem..." : "Idle");
+    }
+    if (timeEl) {
+      if (worker.chunk_end > worker.chunk_start) {
+        timeEl.innerText = `Timeline: ${this.formatTime(worker.chunk_start)} - ${this.formatTime(worker.chunk_end)}`;
+      } else if (worker.queue_count !== undefined && worker.queue_count !== null) {
+        timeEl.innerText = `${worker.queue_count} clips pending`;
       } else {
         timeEl.innerText = "";
       }

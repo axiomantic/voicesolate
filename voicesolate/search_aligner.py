@@ -119,7 +119,8 @@ class SearchAligner:
                 callback({
                     "type": "cache_hit",
                     "count": len(cached_clips),
-                    "character": target_characters[0] if target_characters else ""
+                    "character": target_characters[0] if target_characters else "",
+                    "clips": cached_clips
                 })
             return cached_clips
 
@@ -222,7 +223,8 @@ class SearchAligner:
                         "end_sec": refined_end,
                         "confidence": conf,
                         "character": target.character,
-                        "text": target.text
+                        "text": target.text,
+                        "clip": clip_obj
                     })
 
             if progress and task_id is not None:

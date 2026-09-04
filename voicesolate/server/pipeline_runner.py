@@ -5,6 +5,8 @@ import json
 import time
 import shutil
 import logging
+import threading
+import queue
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import soundfile as sf
@@ -179,6 +181,208 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
             for i, l in enumerate(target_dialogue_lines)
         ]
 
+        # Prepare Stage B (Demucs / Stem Slicing) queue & worker pool
+        stage_b_items: List[Dict[str, Any]] = []
+        stage_b_queue: queue.Queue = queue.Queue()
+        processed_manifest_clips: List[Dict[str, Any]] = []
+        manifest_lock = threading.Lock()
+        stage_b_items_lock = threading.Lock()
+        enhancer = AudioEnhancer(cache_manager=cache_manager) if do_enhance else None
+
+        num_demucs_workers = max(1, min(8, int(params.get("demucs_workers", 2))))
+
+        # Initialize Demucs worker telemetry cards
+        for w_idx in range(1, num_demucs_workers + 1):
+            job_manager.update_worker_state(
+                job_id=job_id,
+                worker_id=f"worker-demucs-{w_idx}",
+                state="idle",
+                chunk_start=0.0,
+                chunk_end=0.0,
+                snippet="Awaiting matched dialogue...",
+                queue_count=0,
+                queue_items=stage_b_items
+            )
+
+        def demucs_worker_loop(w_id: str):
+            while True:
+                work = stage_b_queue.get()
+                if work is None:
+                    stage_b_queue.task_done()
+                    job_manager.update_worker_state(
+                        job_id=job_id,
+                        worker_id=w_id,
+                        state="idle",
+                        chunk_start=0.0,
+                        chunk_end=0.0,
+                        snippet="Isolation complete",
+                        queue_count=0,
+                        queue_items=stage_b_items
+                    )
+                    break
+
+                if job_manager.is_cancelled(job_id):
+                    stage_b_queue.task_done()
+                    break
+
+                char_name, clip, item_b = work
+                char_dir = output_base_dir / char_name
+                raw_dir = char_dir / "raw"
+                raw_dir.mkdir(parents=True, exist_ok=True)
+                enh_dir = char_dir / "enhanced" if do_enhance else None
+                if enh_dir:
+                    enh_dir.mkdir(parents=True, exist_ok=True)
+
+                raw_file = raw_dir / f"{clip.timecode_str}.wav"
+                dur = clip.end_sec - clip.start_sec
+
+                with stage_b_items_lock:
+                    item_b["state"] = "enhancing" if do_enhance else "slicing"
+                    item_b["status_text"] = "Isolating with Demucs v4..." if do_enhance else "Slicing audio stem..."
+                    remaining_queue = sum(1 for it in stage_b_items if it["state"] == "pending")
+
+                job_manager.update_worker_state(
+                    job_id=job_id,
+                    worker_id=w_id,
+                    state="enhancing" if do_enhance else "slicing",
+                    chunk_start=clip.start_sec,
+                    chunk_end=clip.end_sec,
+                    snippet=f"Isolating: \"{clip.text[:30]}\"...",
+                    queue_count=remaining_queue,
+                    queue_items=stage_b_items
+                )
+
+                try:
+                    if not raw_file.exists():
+                        extractor.extract_slice(clip.start_sec, dur, str(raw_file))
+
+                    enh_file = None
+                    if do_enhance and enh_dir:
+                        enh_file = enh_dir / f"{clip.timecode_str}_enhanced.wav"
+                        if not enh_file.exists():
+                            enhancer.clean_and_enhance_file(
+                                str(raw_file),
+                                str(enh_file),
+                                media_key=aligner.media_key,
+                                timecode_str=clip.timecode_str
+                            )
+                            with stage_b_items_lock:
+                                item_b["state"] = "matched"
+                                item_b["status_text"] = "✓ Isolated"
+                                item_b["enhanced_file"] = str(enh_file.resolve())
+                                item_b["file"] = str(raw_file.resolve())
+                            snippet_text = f"Isolated: \"{clip.text[:30]}\""
+                        else:
+                            with stage_b_items_lock:
+                                item_b["state"] = "matched"
+                                item_b["status_text"] = "✓ Cached"
+                                item_b["enhanced_file"] = str(enh_file.resolve())
+                                item_b["file"] = str(raw_file.resolve())
+                            snippet_text = f"Cached: \"{clip.text[:30]}\""
+                    else:
+                        with stage_b_items_lock:
+                            item_b["state"] = "matched"
+                            item_b["status_text"] = "✓ Sliced"
+                            item_b["file"] = str(raw_file.resolve())
+                        snippet_text = f"Sliced: \"{clip.text[:30]}\""
+
+                    with stage_b_items_lock:
+                        remaining_queue = sum(1 for it in stage_b_items if it["state"] == "pending")
+
+                    job_manager.update_worker_state(
+                        job_id=job_id,
+                        worker_id=w_id,
+                        state="matched",
+                        chunk_start=clip.start_sec,
+                        chunk_end=clip.end_sec,
+                        snippet=snippet_text,
+                        queue_count=remaining_queue,
+                        queue_items=stage_b_items
+                    )
+
+                    clip_dict = {
+                        "character": char_name,
+                        "text": clip.text,
+                        "start_sec": clip.start_sec,
+                        "end_sec": clip.end_sec,
+                        "confidence": clip.confidence,
+                        "file": str(raw_file.resolve()),
+                        "enhanced_file": str(enh_file.resolve()) if enh_file and enh_file.exists() else None
+                    }
+                    with manifest_lock:
+                        processed_manifest_clips.append(clip_dict)
+                    job_manager.notify_clip_discovered(job_id, clip_dict)
+
+                except Exception as ex:
+                    logger.exception(f"[{w_id}] Error processing clip {clip.timecode_str}")
+                    with stage_b_items_lock:
+                        item_b["state"] = "failed"
+                        item_b["status_text"] = f"Failed: {str(ex)[:30]}"
+                        remaining_queue = sum(1 for it in stage_b_items if it["state"] == "pending")
+                    job_manager.update_worker_state(
+                        job_id=job_id,
+                        worker_id=w_id,
+                        state="idle",
+                        chunk_start=clip.start_sec,
+                        chunk_end=clip.end_sec,
+                        snippet=f"Failed: {str(ex)[:25]}",
+                        queue_count=remaining_queue,
+                        queue_items=stage_b_items
+                    )
+                finally:
+                    stage_b_queue.task_done()
+
+        # Start Demucs worker threads
+        demucs_threads = []
+        for w_idx in range(1, num_demucs_workers + 1):
+            t = threading.Thread(target=demucs_worker_loop, args=(f"worker-demucs-{w_idx}",), daemon=True)
+            t.start()
+            demucs_threads.append(t)
+
+        def enqueue_clip_to_stage_b(clip):
+            dur = clip.end_sec - clip.start_sec
+            if dur < min_duration:
+                return
+            with stage_b_items_lock:
+                idx = len(stage_b_items)
+                dur_s = round(dur, 1)
+                item_b = {
+                    "id": f"demucs-{idx}",
+                    "index": idx,
+                    "character": clip.character,
+                    "text": clip.text,
+                    "timecode": clip.timecode_str,
+                    "duration": f"{dur_s}s",
+                    "start_sec": clip.start_sec,
+                    "end_sec": clip.end_sec,
+                    "confidence": clip.confidence,
+                    "state": "pending",
+                    "status_text": "Queued for Demucs"
+                }
+                stage_b_items.append(item_b)
+                remaining = sum(1 for it in stage_b_items if it["state"] == "pending")
+
+            stage_b_queue.put((clip.character, clip, item_b))
+
+            # Update queue info on idle workers
+            job = job_manager.get_job(job_id)
+            if job:
+                for w_i in range(1, num_demucs_workers + 1):
+                    w_id = f"worker-demucs-{w_i}"
+                    curr_w = job.workers.get(w_id, {})
+                    if curr_w.get("state") == "idle":
+                        job_manager.update_worker_state(
+                            job_id=job_id,
+                            worker_id=w_id,
+                            state="idle",
+                            chunk_start=0.0,
+                            chunk_end=0.0,
+                            snippet=f"{remaining} clips queued for isolation",
+                            queue_count=remaining,
+                            queue_items=stage_b_items
+                        )
+                        break
+
         # Worker state reporter
         def on_align_step(step_info: Dict[str, Any]):
             worker_id = "worker-stt-1"
@@ -237,6 +441,10 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                         "confidence": step_info.get("confidence")
                     }
                 )
+                matched_clip = step_info.get("clip")
+                if matched_clip:
+                    enqueue_clip_to_stage_b(matched_clip)
+
             elif stype == "cache_hit":
                 for it in stage_a_items:
                     it["state"] = "matched"
@@ -251,6 +459,8 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                     queue_count=0,
                     queue_items=stage_a_items
                 )
+                for c in step_info.get("clips", []):
+                    enqueue_clip_to_stage_b(c)
 
         # Signal STT Worker starting search
         job_manager.update_worker_state(
@@ -275,6 +485,12 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
         )
 
         if not aligned_clips:
+            # Signal Demucs workers to terminate
+            for _ in range(num_demucs_workers):
+                stage_b_queue.put(None)
+            for t in demucs_threads:
+                t.join()
+
             job_manager.update_worker_state(
                 job_id=job_id,
                 worker_id="worker-stt-1",
@@ -316,157 +532,31 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
 
         job_manager.update_job(
             job_id,
-            progress=45.0,
-            stage="slicing",
-            message=f"Found {len(aligned_clips)} dialogue instances. Slicing raw discrete audio stems..."
+            progress=50.0,
+            stage="demucs",
+            message=f"Found {len(aligned_clips)} dialogue instances. Processing neural vocal isolation with {num_demucs_workers} workers..."
         )
 
-        # Process per character
-        enhancer = AudioEnhancer(cache_manager=cache_manager) if do_enhance else None
-        processed_manifest_clips = []
+        # Signal Demucs workers that alignment is done
+        for _ in range(num_demucs_workers):
+            stage_b_queue.put(None)
 
-        total_steps = len(target_chars) * len(aligned_clips)
-        step_idx = 0
+        # Wait for all Demucs workers to finish processing queued clips
+        for t in demucs_threads:
+            t.join()
 
-        # Initialize Demucs queue state
-        stage_b_items = []
-        if do_enhance:
-            for idx, clip in enumerate(aligned_clips):
-                dur_s = round(clip.end_sec - clip.start_sec, 1)
-                stage_b_items.append({
-                    "id": f"demucs-{idx}",
-                    "index": idx,
-                    "character": clip.character,
-                    "text": clip.text,
-                    "timecode": clip.timecode_str,
-                    "duration": f"{dur_s}s",
-                    "start_sec": clip.start_sec,
-                    "end_sec": clip.end_sec,
-                    "confidence": clip.confidence,
-                    "state": "pending",
-                    "status_text": "Queued for Demucs"
-                })
+        if job_manager.is_cancelled(job_id):
+            job_manager.update_job(job_id, status="cancelled", message="Cancelled by user.")
+            return
 
-            job_manager.update_worker_state(
-                job_id=job_id,
-                worker_id="worker-demucs-1",
-                state="idle",
-                chunk_start=0.0,
-                chunk_end=0.0,
-                snippet=f"{len(aligned_clips)} clips queued for isolation",
-                queue_count=len(aligned_clips),
-                queue_items=stage_b_items
-            )
-
+        # Process per character datasets and models
         for char_name in target_chars:
             if job_manager.is_cancelled(job_id):
                 job_manager.update_job(job_id, status="cancelled", message="Cancelled by user.")
                 return
 
             char_dir = output_base_dir / char_name
-            raw_dir = char_dir / "raw"
-            raw_dir.mkdir(parents=True, exist_ok=True)
-            enh_dir = char_dir / "enhanced" if do_enhance else None
-            if enh_dir:
-                enh_dir.mkdir(parents=True, exist_ok=True)
-
-            char_clips = [c for c in aligned_clips if c.character.upper() == char_name.upper()]
-            
-            for idx, clip in enumerate(char_clips):
-                step_idx += 1
-                prog = 45.0 + (step_idx / max(1, total_steps)) * 35.0
-
-                raw_file = raw_dir / f"{clip.timecode_str}.wav"
-                dur = clip.end_sec - clip.start_sec
-
-                if dur < min_duration:
-                    continue
-
-                if not raw_file.exists():
-                    extractor.extract_slice(clip.start_sec, dur, str(raw_file))
-
-                enh_file = None
-                if do_enhance and enh_dir:
-                    enh_file = enh_dir / f"{clip.timecode_str}_enhanced.wav"
-                    item_b = next((it for it in stage_b_items if it.get("timecode") == clip.timecode_str), None)
-
-                    if not enh_file.exists():
-                        if item_b:
-                            item_b["state"] = "enhancing"
-                            item_b["status_text"] = "Isolating with Demucs v4..."
-
-                        remaining_queue = sum(1 for it in stage_b_items if it["state"] == "pending")
-                        job_manager.update_job(
-                            job_id,
-                            progress=prog,
-                            stage="demucs",
-                            message=f"[{idx+1}/{len(char_clips)}] Demucs vocal isolation: {clip.text[:40]}..."
-                        )
-                        job_manager.update_worker_state(
-                            job_id=job_id,
-                            worker_id="worker-demucs-1",
-                            state="enhancing",
-                            chunk_start=clip.start_sec,
-                            chunk_end=clip.end_sec,
-                            snippet=f"Isolating ({idx+1}/{len(char_clips)}): \"{clip.text[:30]}\"...",
-                            queue_count=remaining_queue,
-                            queue_items=stage_b_items
-                        )
-                        enhancer.clean_and_enhance_file(
-                            str(raw_file),
-                            str(enh_file),
-                            media_key=aligner.media_key,
-                            timecode_str=clip.timecode_str
-                        )
-                        if item_b:
-                            item_b["state"] = "matched"
-                            item_b["status_text"] = "✓ Isolated"
-                            item_b["enhanced_file"] = str(enh_file.resolve())
-                            item_b["file"] = str(raw_file.resolve())
-
-                        remaining_queue = sum(1 for it in stage_b_items if it["state"] == "pending")
-                        job_manager.update_worker_state(
-                            job_id=job_id,
-                            worker_id="worker-demucs-1",
-                            state="matched",
-                            chunk_start=clip.start_sec,
-                            chunk_end=clip.end_sec,
-                            snippet=f"Isolated ({idx+1}/{len(char_clips)}): \"{clip.text[:30]}\"",
-                            queue_count=remaining_queue,
-                            queue_items=stage_b_items
-                        )
-                    else:
-                        if item_b:
-                            item_b["state"] = "matched"
-                            item_b["status_text"] = "✓ Cached"
-                            item_b["enhanced_file"] = str(enh_file.resolve())
-                            item_b["file"] = str(raw_file.resolve())
-
-                        remaining_queue = sum(1 for it in stage_b_items if it["state"] == "pending")
-                        job_manager.update_worker_state(
-                            job_id=job_id,
-                            worker_id="worker-demucs-1",
-                            state="matched",
-                            chunk_start=clip.start_sec,
-                            chunk_end=clip.end_sec,
-                            snippet=f"Cached: \"{clip.text[:30]}\"",
-                            queue_count=remaining_queue,
-                            queue_items=stage_b_items
-                        )
-
-                clip_dict = {
-                    "character": char_name,
-                    "text": clip.text,
-                    "start_sec": clip.start_sec,
-                    "end_sec": clip.end_sec,
-                    "confidence": clip.confidence,
-                    "file": str(raw_file.resolve()),
-                    "enhanced_file": str(enh_file.resolve()) if enh_file and enh_file.exists() else None
-                }
-                processed_manifest_clips.append(clip_dict)
-                job_manager.notify_clip_discovered(job_id, clip_dict)
-
-            # Build datasets
+            char_dir.mkdir(parents=True, exist_ok=True)
             builder = DatasetBuilder(char_dir)
             this_char_clips = [c for c in processed_manifest_clips if c.get("character", "").upper() == char_name.upper()]
             if not no_aggregate:
@@ -502,14 +592,10 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
         # Generate macro-waveform data
         waveform_data = generate_macro_waveform_from_manifest(output_base_dir / "manifest.json")
 
-        if do_enhance:
-            for it in stage_b_items:
-                if it["state"] == "pending":
-                    it["state"] = "matched"
-                    it["status_text"] = "✓ Complete"
+        for w_i in range(1, num_demucs_workers + 1):
             job_manager.update_worker_state(
                 job_id=job_id,
-                worker_id="worker-demucs-1",
+                worker_id=f"worker-demucs-{w_i}",
                 state="matched",
                 chunk_start=0.0,
                 chunk_end=0.0,
@@ -542,10 +628,10 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
             chunk_end=0.0,
             snippet=f"Failed: {str(e)[:40]}"
         )
-        if do_enhance:
+        for w_i in range(1, num_demucs_workers + 1):
             job_manager.update_worker_state(
                 job_id=job_id,
-                worker_id="worker-demucs-1",
+                worker_id=f"worker-demucs-{w_i}",
                 state="error",
                 chunk_start=0.0,
                 chunk_end=0.0,

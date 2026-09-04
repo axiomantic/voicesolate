@@ -64,6 +64,8 @@ class PipelineRequest(BaseModel):
     no_train: bool = False
     no_aggregate: bool = False
     similarity_threshold: float = 55.0
+    demucs_workers: int = 2
+    stt_workers: int = 1
     no_cache_stt: bool = False
     no_cache_align: bool = False
     no_cache_audio: bool = False

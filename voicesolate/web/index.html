@@ -281,6 +281,16 @@
                 <span style="font-size:11px; color:var(--text-dim);">(discards clips shorter than this; 0 keeps all)</span>
               </div>
 
+              <!-- Demucs Workers Option -->
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label for="step2DemucsWorkers" style="font-size:13px; font-weight:600; color:#fff; white-space:nowrap;">
+                  Demucs Workers:
+                </label>
+                <div style="display:flex; align-items:center; gap:4px;">
+                  <input type="number" id="step2DemucsWorkers" class="form-input" min="1" max="8" step="1" value="2" style="width:60px; padding:6px 8px; font-size:13px; text-align:center;" />
+                </div>
+              </div>
+
               <!-- Neural Isolation Demucs Toggle -->
               <div style="display:flex; align-items:center; gap:8px;">
                 <input type="checkbox" id="step2EnhanceToggle" checked style="width:16px; height:16px; accent-color:var(--accent-cyan); cursor:pointer;" />
@@ -366,13 +376,21 @@
                   <span id="demucsQueueSummary" style="font-size:11px; font-family:var(--font-mono); color:var(--text-dim);">0 items</span>
                 </div>
                 <div class="radar-workers" id="enhancementWorkersContainer">
-                  <div class="worker-card" id="demucsWorkerCard">
+                  <div class="worker-card" id="demucsWorkerCard-worker-demucs-1">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                       <span style="font-weight:600; color:#fff;">worker-demucs-1</span>
-                      <span class="worker-badge idle" id="demucsBadge">idle</span>
+                      <span class="worker-badge idle" id="demucsWorkerBadge-worker-demucs-1">idle</span>
                     </div>
-                    <div style="font-size:12px; color:var(--text-muted);" id="demucsSnippet">Queue empty</div>
-                    <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);" id="demucsQueueCount">0 clips pending</div>
+                    <div style="font-size:12px; color:var(--text-muted);" id="demucsWorkerSnippet-worker-demucs-1">Queue empty</div>
+                    <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);" id="demucsWorkerTime-worker-demucs-1">0 clips pending</div>
+                  </div>
+                  <div class="worker-card" id="demucsWorkerCard-worker-demucs-2">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                      <span style="font-weight:600; color:#fff;">worker-demucs-2</span>
+                      <span class="worker-badge idle" id="demucsWorkerBadge-worker-demucs-2">idle</span>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted);" id="demucsWorkerSnippet-worker-demucs-2">Queue empty</div>
+                    <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);" id="demucsWorkerTime-worker-demucs-2">0 clips pending</div>
                   </div>
                 </div>
                 <!-- Stage B Itemized Queue -->
