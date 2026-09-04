@@ -2,10 +2,13 @@ import os
 import re
 import json
 import hashlib
+import logging
 import requests
 from bs4 import BeautifulSoup
 from dataclasses import dataclass, asdict
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class DialogueLine:
@@ -13,6 +16,17 @@ class DialogueLine:
     character: str
     text: str
     word_count: int
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return getattr(self, key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(key)
+
+    def __contains__(self, key: str) -> bool:
+        return hasattr(self, key)
 
 @dataclass
 class CharacterStats:
@@ -27,12 +41,65 @@ class ScriptParser:
     Features persistent disk caching for parsed dialogues and character statistics.
     """
 
-    def __init__(self, cache_dir: str = "cache/scripts", use_cache: bool = True):
+    def __init__(
+        self,
+        cache_dir: str = "cache/scripts",
+        use_cache: bool = True,
+        script_source: Optional[str] = None,
+        provider: Optional[str] = None,
+        subtitles_path: Optional[str] = None,
+        episode_hint: Optional[str] = None,
+        **kwargs: Any
+    ):
         self.cache_dir = cache_dir
         self.use_cache = use_cache
+        self.script_source = script_source
+        self.provider = provider
+        self.subtitles_path = subtitles_path
+        self.episode_hint = episode_hint
         os.makedirs(self.cache_dir, exist_ok=True)
         self.dialogues: List[DialogueLine] = []
         self.character_stats: Dict[str, CharacterStats] = {}
+
+    @property
+    def script_id(self) -> str:
+        src = self.script_source or self.episode_hint or self.subtitles_path or "script"
+        return self._get_cache_key(src)
+
+    def parse(self) -> List[DialogueLine]:
+        """
+        Parses script lines from configured sources (script_source, subtitles_path, or episode_hint).
+        Returns list of DialogueLine objects.
+        """
+        if self.script_source:
+            try:
+                dialogues, _ = self.fetch_or_load(self.script_source, provider=self.provider)
+                if dialogues:
+                    return dialogues
+            except Exception as e:
+                logger.warning(f"Failed to load script_source '{self.script_source}': {e}")
+
+        if self.subtitles_path and os.path.exists(self.subtitles_path):
+            try:
+                dialogues, _ = self.fetch_or_load(self.subtitles_path)
+                if dialogues:
+                    return dialogues
+            except Exception as e:
+                logger.warning(f"Failed to load subtitles_path '{self.subtitles_path}': {e}")
+
+        if self.episode_hint:
+            try:
+                dialogues, _ = self.fetch_or_load(self.episode_hint, provider=self.provider)
+                if dialogues:
+                    return dialogues
+            except Exception as e:
+                logger.warning(f"Failed to load episode_hint '{self.episode_hint}': {e}")
+
+        return self.dialogues
+
+    def get_character_counts(self) -> Dict[str, int]:
+        """Returns mapping of character name to line count."""
+        return {name: stats.line_count for name, stats in self.character_stats.items()}
 
     def _get_cache_key(self, source: str) -> str:
         """Generates a sanitized or hashed file key for caching."""
@@ -127,24 +194,42 @@ class ScriptParser:
     def _fetch_chakoteya_startrek(self, episode_identifier: str) -> str:
         """Specialized provider for Star Trek scripts from Chakoteya."""
         ident = episode_identifier.lower().replace("-", " ").replace("_", " ").strip()
+        series = "NextGen"
+        if "ds9" in ident or "deep space" in ident:
+            series = "DS9"
+        elif "voy" in ident or "voyager" in ident:
+            series = "Voyager"
+        elif "ent" in ident or "enterprise" in ident:
+            series = "Enterprise"
+
         ep_map = {"s05e26": 226, "s06e01": 227}
         ep_num = ep_map.get(ident)
         if not ep_num:
             match_se = re.search(r"s0?(\d+)e0?(\d+)", ident)
             if match_se:
                 s, e = int(match_se.group(1)), int(match_se.group(2))
-                season_starts = {1: 101, 2: 127, 3: 149, 4: 175, 5: 201, 6: 227, 7: 253}
-                if s in season_starts:
-                    ep_num = season_starts[s] + e - 1
+                if series == "DS9":
+                    ds9_starts = {1: 401, 2: 421, 3: 447, 4: 473, 5: 499, 6: 525, 7: 551}
+                    ep_num = ds9_starts.get(s, 401) + e - 1
+                elif series == "Voyager":
+                    voy_starts = {1: 101, 2: 117, 3: 147, 4: 173, 5: 199, 6: 225, 7: 251}
+                    ep_num = voy_starts.get(s, 101) + e - 1
+                elif series == "Enterprise":
+                    ent_starts = {1: 1, 2: 27, 3: 53, 4: 77}
+                    ep_num = ent_starts.get(s, 1) + e - 1
+                else:
+                    season_starts = {1: 101, 2: 127, 3: 149, 4: 175, 5: 201, 6: 227, 7: 253}
+                    if s in season_starts:
+                        ep_num = season_starts[s] + e - 1
             if not ep_num:
-                ep_num = 226
+                ep_num = 226 if series == "NextGen" else (401 if series == "DS9" else 101)
 
-        cache_path = os.path.join(self.cache_dir, f"tng_{ep_num}.htm")
+        cache_path = os.path.join(self.cache_dir, f"{series.lower()}_{ep_num}.htm")
         if os.path.exists(cache_path):
             with open(cache_path, "r", encoding="utf-8", errors="ignore") as f:
                 return f.read()
 
-        url = f"http://www.chakoteya.net/NextGen/{ep_num}.htm"
+        url = f"http://www.chakoteya.net/{series}/{ep_num}.htm"
         resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
         resp.raise_for_status()
         with open(cache_path, "w", encoding="utf-8") as f:
