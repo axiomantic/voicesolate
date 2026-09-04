@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from .job_manager import job_manager
 from .engine_service import engine_service
 from .pipeline_runner import run_scan_job, run_pipeline_job
-from ..waveform import generate_macro_waveform_from_manifest, extract_peaks_from_wav
+from ..waveform import generate_macro_waveform_from_manifest, extract_peaks_from_wav, generate_macro_waveform_for_media
 from ..script_parser import ScriptParser
 from ..model_trainer import ModelTrainer
 
@@ -319,12 +319,15 @@ def get_episode_details(episode_name: str):
     }
 
 @app.get("/api/v1/episodes/{episode_name}/waveform")
-def get_episode_waveform(episode_name: str):
+def get_episode_waveform(episode_name: str, media_path: Optional[str] = None):
     ep_dir = _find_episode_dir(episode_name)
-    if not ep_dir:
-        return {"points": [], "speech_spans": [], "duration": 0}
-    manifest_file = ep_dir / "manifest.json"
-    return generate_macro_waveform_from_manifest(manifest_file, num_points=1200)
+    manifest_file = (ep_dir / "manifest.json") if ep_dir else None
+    return generate_macro_waveform_for_media(
+        episode_name=episode_name,
+        media_path=media_path,
+        manifest_path=manifest_file,
+        num_points=1200
+    )
 
 # ----------------- CHARACTER STUDIO DETAILS -----------------
 

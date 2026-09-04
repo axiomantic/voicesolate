@@ -17,6 +17,8 @@ export class WaveformRadar {
     this.workers = {};
     this.activeClip = null;
     this.hoverClip = null;
+    this.isLoading = false;
+    this.loadingMessage = "Sampling media audio timeline...";
 
     this.initCanvas();
     this.bindEvents();
@@ -39,8 +41,15 @@ export class WaveformRadar {
     this.draw();
   }
 
+  setLoading(isLoading, message = "Sampling media audio timeline...") {
+    this.isLoading = isLoading;
+    this.loadingMessage = message;
+    this.draw();
+  }
+
   setData(waveformData) {
     if (!waveformData) return;
+    this.isLoading = false;
     this.duration = waveformData.duration || 0;
     this.peaks = waveformData.peaks || [];
     this.rms = waveformData.rms || [];
@@ -112,7 +121,7 @@ export class WaveformRadar {
   startRenderLoop() {
     const loop = () => {
       const hasActiveWorkers = Object.values(this.workers).some(w => w.state === "scanning");
-      if (hasActiveWorkers) {
+      if (this.isLoading || hasActiveWorkers) {
         this.draw();
       }
       requestAnimationFrame(loop);
@@ -127,6 +136,89 @@ export class WaveformRadar {
     const midY = h / 2;
 
     ctx.clearRect(0, 0, w, h);
+
+    // Loading / Sampling Animation State
+    if (this.isLoading) {
+      const now = Date.now() / 1000;
+
+      // Draw background grid lines
+      ctx.strokeStyle = "rgba(30, 41, 59, 0.6)";
+      ctx.lineWidth = 1;
+      const cols = 12;
+      for (let i = 1; i < cols; i++) {
+        const x = (i / cols) * w;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
+
+      // Draw simulated pulsating audio envelope bars
+      const numBars = Math.floor(w / 7);
+      const barW = Math.max(2, (w / numBars) - 1.5);
+      for (let i = 0; i < numBars; i++) {
+        const x = i * (w / numBars);
+        const wave = Math.sin(i * 0.18 + now * 3.2) * 0.5 + 0.5;
+        const subwave = Math.cos(i * 0.06 - now * 1.5) * 0.4 + 0.5;
+        const heightFactor = Math.max(0.06, wave * subwave);
+        const barH = heightFactor * (h * 0.38);
+
+        const grad = ctx.createLinearGradient(0, midY - barH, 0, midY + barH);
+        grad.addColorStop(0, "rgba(6, 182, 212, 0.25)");
+        grad.addColorStop(0.5, "rgba(99, 102, 241, 0.15)");
+        grad.addColorStop(1, "rgba(6, 182, 212, 0.25)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(x, midY - barH, barW, barH * 2);
+      }
+
+      // Sweeping radar scan line & glow trail
+      const sweepWidth = 140;
+      const sweepX = ((now * 0.35) % 1.0) * (w + sweepWidth) - sweepWidth;
+      const sweepGrad = ctx.createLinearGradient(sweepX, 0, sweepX + sweepWidth, 0);
+      sweepGrad.addColorStop(0, "rgba(6, 182, 212, 0)");
+      sweepGrad.addColorStop(0.8, "rgba(6, 182, 212, 0.12)");
+      sweepGrad.addColorStop(1, "rgba(56, 189, 248, 0.35)");
+      ctx.fillStyle = sweepGrad;
+      ctx.fillRect(Math.max(0, sweepX), 0, Math.min(sweepWidth, w - sweepX), h);
+
+      // Leading scanline
+      if (sweepX + sweepWidth >= 0 && sweepX + sweepWidth <= w) {
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(sweepX + sweepWidth, 0);
+        ctx.lineTo(sweepX + sweepWidth, h);
+        ctx.stroke();
+      }
+
+      // Sleek Glassmorphic Center Loading Pill
+      const pillW = 340;
+      const pillH = 42;
+      const pillX = (w - pillW) / 2;
+      const pillY = midY - pillH / 2;
+
+      ctx.fillStyle = "rgba(15, 23, 42, 0.90)";
+      ctx.strokeStyle = "rgba(6, 182, 212, 0.65)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(pillX, pillY, pillW, pillH, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      // Pulsing indicator dot inside pill
+      const pulseOpacity = (Math.sin(now * 5) + 1) / 2;
+      ctx.fillStyle = `rgba(6, 182, 212, ${0.4 + 0.6 * pulseOpacity})`;
+      ctx.beginPath();
+      ctx.arc(pillX + 22, midY, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Loading text
+      ctx.fillStyle = "#f8fafc";
+      ctx.font = "600 12px ui-sans-serif, system-ui, sans-serif";
+      ctx.fillText(this.loadingMessage || "Sampling media audio timeline...", pillX + 38, midY + 4);
+
+      return;
+    }
 
     // 1. Draw Grid Lines
     ctx.strokeStyle = "#162032";
@@ -181,6 +273,12 @@ export class WaveformRadar {
       ctx.moveTo(0, midY);
       ctx.lineTo(w, midY);
       ctx.stroke();
+
+      ctx.fillStyle = "#475569";
+      ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Awaiting media selection to probe timeline...", w / 2, midY - 10);
+      ctx.textAlign = "start";
     }
 
     // 3. Draw Divide-and-Conquer Search Worker Windows

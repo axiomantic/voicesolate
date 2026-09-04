@@ -36,6 +36,7 @@ ENV/
 cache/audio/
 cache/stt/
 cache/subtitles/
+cache/waveforms/
 output
 output/
 output2/

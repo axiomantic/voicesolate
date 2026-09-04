@@ -473,6 +473,17 @@ class VoicesolateWizardApp {
             this.radar.draw();
           }
           this.waveformData = null;
+          if (this.mediaPath) {
+            const ep = this.episodeName || (this.episodeCode ? `Episode_${this.episodeCode}` : "Current_Media");
+            api.getWaveform(ep, this.mediaPath).then(wf => {
+              this.waveformData = wf;
+              if (this.radar) this.radar.setData(wf);
+              if (wf && wf.duration) {
+                const durEl = document.getElementById("radarDurationText");
+                if (durEl) durEl.innerText = this.formatTime(wf.duration);
+              }
+            }).catch(() => {});
+          }
 
           const radarClipsEl = document.getElementById("radarClipsCount");
           if (radarClipsEl) radarClipsEl.innerText = "0 clips";
@@ -515,23 +526,39 @@ class VoicesolateWizardApp {
       setTimeout(() => this.radar.resize(), 50);
     }
 
-    // Load macro-waveform for this episode if not loaded
+    // Load macro-waveform for this episode if not loaded or duration is 0
     const loadingBanner = document.getElementById("waveformLoadingBanner");
     const epName = this.episodeName || (this.episodeCode ? `Episode_${this.episodeCode}` : "Current_Media");
+    const durationEl = document.getElementById("radarDurationText");
+    const extStatusEl = document.getElementById("step2ExtractionStatusText");
 
-    if (!this.waveformData || this.waveformData.episode !== epName) {
-      if (loadingBanner) loadingBanner.style.display = "block";
+    if (!this.waveformData || this.waveformData.episode !== epName || !this.waveformData.duration) {
+      if (loadingBanner) loadingBanner.style.display = "flex";
+      if (durationEl) durationEl.innerText = "Sampling...";
+      if (extStatusEl && (!this.alignedClips || this.alignedClips.length === 0)) {
+        extStatusEl.innerText = "⏳ Sampling media file for audio envelope & duration...";
+      }
+      if (this.radar) {
+        this.radar.setLoading(true, "📡 Sampling media timeline & probing audio channels...");
+      }
+
       try {
-        const wf = await api.getWaveform(epName);
+        const wf = await api.getWaveform(epName, this.mediaPath);
         this.waveformData = wf;
         if (this.radar) {
           this.radar.setData(wf);
         }
         if (wf && wf.duration) {
-          document.getElementById("radarDurationText").innerText = this.formatTime(wf.duration);
+          if (durationEl) durationEl.innerText = this.formatTime(wf.duration);
+        }
+        if (extStatusEl && (!this.alignedClips || this.alignedClips.length === 0)) {
+          extStatusEl.innerText = "Audio radar initialized. Ready to find character dialogue.";
         }
       } catch (err) {
         console.warn("Waveform not yet generated for episode:", err);
+        if (this.radar) {
+          this.radar.setLoading(false);
+        }
       } finally {
         if (loadingBanner) loadingBanner.style.display = "none";
       }

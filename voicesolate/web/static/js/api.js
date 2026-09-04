@@ -44,7 +44,10 @@ class VoicesolateAPI {
   // Episodes & Manifest
   getEpisodes() { return this.get("/api/v1/episodes"); }
   getEpisodeDetails(episodeName) { return this.get(`/api/v1/episodes/${encodeURIComponent(episodeName)}`); }
-  getWaveform(episodeName) { return this.get(`/api/v1/episodes/${encodeURIComponent(episodeName)}/waveform`); }
+  getWaveform(episodeName, mediaPath = null) {
+    const params = mediaPath ? { media_path: mediaPath } : {};
+    return this.get(`/api/v1/episodes/${encodeURIComponent(episodeName)}/waveform`, params);
+  }
   getCharacterDetails(characterName, episode) {
     return this.get(`/api/v1/characters/${encodeURIComponent(characterName)}/details`, { episode });
   }
