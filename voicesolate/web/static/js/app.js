@@ -664,7 +664,7 @@ class VoicesolateWizardApp {
         ]);
 
         if (wf) {
-          wf.clips = [];
+          wf.clips = (this.alignedClips && this.alignedClips.length > 0) ? this.alignedClips : (wf.clips || []);
           this.waveformData = wf;
           if (this.radar) {
             this.radar.setData(wf);
@@ -704,10 +704,74 @@ class VoicesolateWizardApp {
 
       if (clipCount > 0) {
         if (radarClipsEl) radarClipsEl.innerText = `${clipCount} clips`;
-        if (extStatusEl) extStatusEl.innerText = `✓ Found ${clipCount} existing neural clips for ${this.selectedCharacter}`;
-        if (gatingStatusEl) gatingStatusEl.innerText = `✓ Complete! ${clipCount} clips matched and isolated for ${this.selectedCharacter}.`;
+        const durFormatted = details.dataset_stats?.total_duration_formatted || this.humanizeSpeakingTime(details.dataset_stats?.total_duration_sec || (clipCount * 3.2));
+        if (extStatusEl) extStatusEl.innerText = `✓ Found ${clipCount} existing neural clips for ${this.selectedCharacter} (${durFormatted})`;
+        if (gatingStatusEl) gatingStatusEl.innerText = `✓ Complete! ${clipCount} clips matched and isolated for ${this.selectedCharacter} (${durFormatted}).`;
         if (nextBtn) nextBtn.disabled = false;
         this.markStepCompleted(2);
+
+        // Re-enter state: populate radar, Stage A & Stage B done queues, and inspector
+        if (details.clips && details.clips.length > 0) {
+          this.alignedClips = details.clips;
+          if (this.radar) {
+            this.radar.setClips(this.alignedClips);
+          }
+
+          // Build Stage B (Demucs) items
+          const stageBItems = this.alignedClips.map(c => ({
+            timecode: `${this.formatTime(c.start_sec)} ➔ ${this.formatTime(c.end_sec)}`,
+            start_sec: c.start_sec,
+            end_sec: c.end_sec,
+            duration: `${(c.end_sec - c.start_sec).toFixed(1)}s`,
+            text: c.text,
+            character: c.character || this.selectedCharacter,
+            state: "completed",
+            status_text: c.enhanced_file ? "Isolated & Denoised" : "Extracted",
+            file: c.file,
+            enhanced_file: c.enhanced_file,
+            confidence: c.confidence
+          }));
+          this.renderStageBQueueItems(stageBItems);
+
+          // Build Stage A (STT) items
+          const stageAItems = this.alignedClips.map(c => ({
+            timecode: `${this.formatTime(c.start_sec)} ➔ ${this.formatTime(c.end_sec)}`,
+            start_sec: c.start_sec,
+            end_sec: c.end_sec,
+            duration: `${(c.end_sec - c.start_sec).toFixed(1)}s`,
+            text: c.text,
+            state: "matched",
+            status_text: `${Math.round(c.confidence || 95)}% match`
+          }));
+          this.renderStageAQueueItems(stageAItems);
+
+          // Update worker telemetry cards to matched / done
+          const sttCount = parseInt(document.getElementById("step2SttWorkers")?.value) || 2;
+          for (let i = 1; i <= sttCount; i++) {
+            this.updateSTTWorkerUI({
+              worker_id: `worker-stt-${i}`,
+              state: "matched",
+              snippet: `✓ ${clipCount} dialogue lines aligned`,
+              chunk_start: 0,
+              chunk_end: 0
+            });
+          }
+
+          const demucsCount = parseInt(document.getElementById("step2DemucsWorkers")?.value) || 2;
+          for (let i = 1; i <= demucsCount; i++) {
+            this.updateEnhancementWorkerUI({
+              worker_id: `worker-demucs-${i}`,
+              state: "idle",
+              snippet: `✓ All ${clipCount} clips neural isolated`,
+              queue_count: 0
+            });
+          }
+
+          // Open inspector for the first clip so user can see raw vs isolated immediately
+          if (this.alignedClips.length > 0) {
+            this.handleClipSelected(this.alignedClips[0]);
+          }
+        }
       } else {
         if (radarClipsEl) radarClipsEl.innerText = "0 clips";
         if (extStatusEl) extStatusEl.innerText = "No clips extracted yet. Ready to search.";
@@ -720,6 +784,7 @@ class VoicesolateWizardApp {
         }
       }
     } catch (e) {
+      console.warn("Could not check existing clips:", e);
       const nextBtn = document.getElementById("step2NextBtn");
       const radarClipsEl = document.getElementById("radarClipsCount");
       const extStatusEl = document.getElementById("step2ExtractionStatusText");
@@ -860,6 +925,10 @@ class VoicesolateWizardApp {
     inspector.style.display = "block";
   }
 
+  showClipDetails(clip) {
+    this.handleClipSelected(clip);
+  }
+
   // ----------------- STEP 3: MODEL TRAINING -----------------
 
   setupStep3Events() {
@@ -900,8 +969,12 @@ class VoicesolateWizardApp {
       if (details && details.dataset_stats) {
         const count = details.dataset_stats.clip_count || 0;
         document.getElementById("trainingClipsCount").innerText = count;
-        const totalSec = details.dataset_stats.total_duration_sec || (count * 3.2);
-        document.getElementById("trainingDurationText").innerText = this.humanizeSpeakingTime(totalSec);
+        if (details.dataset_stats.total_duration_formatted) {
+          document.getElementById("trainingDurationText").innerText = details.dataset_stats.total_duration_formatted;
+        } else {
+          const totalSec = details.dataset_stats.total_duration_sec || (count * 3.2);
+          document.getElementById("trainingDurationText").innerText = this.humanizeSpeakingTime(totalSec);
+        }
       }
     } catch (err) {
       console.warn("Could not load character engine details:", err);
@@ -913,18 +986,27 @@ class VoicesolateWizardApp {
     if (!container) return;
     container.innerHTML = "";
 
+    if (!this.activeTrainingEngines) this.activeTrainingEngines = new Set();
+    if (!this.trainingProgress) this.trainingProgress = {};
+    if (!this.trainingMessage) this.trainingMessage = {};
+
     let anyTrained = false;
 
     engines.forEach(eng => {
       if (eng.trained || eng.ready) anyTrained = true;
 
+      const isTraining = this.activeTrainingEngines.has(eng.id);
+
       const card = document.createElement("div");
-      card.className = "engine-card";
+      card.className = `engine-card ${isTraining ? 'training-active' : ''}`;
       card.id = `engine_card_${eng.id}`;
 
       let statusBadgeClass = "badge-locked";
       let statusText = "Needs Configuration";
-      if (!eng.installed) {
+      if (isTraining) {
+        statusBadgeClass = "badge-scanning";
+        statusText = "⏳ Training in Progress...";
+      } else if (!eng.installed) {
         statusBadgeClass = "badge-locked";
         statusText = "Package Missing";
       } else if (eng.trained || eng.ready) {
@@ -936,7 +1018,14 @@ class VoicesolateWizardApp {
       }
 
       let actionBtnHtml = "";
-      if (!eng.installed) {
+      if (isTraining) {
+        actionBtnHtml = `
+          <button class="btn btn-secondary btn-sm train-engine-btn" data-engine="${eng.id}" disabled style="opacity:0.6; cursor:not-allowed;">
+            <span class="spinner" style="width:12px; height:12px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; display:inline-block; vertical-align:middle; margin-right:6px;"></span>
+            Training ${eng.name}...
+          </button>
+        `;
+      } else if (!eng.installed) {
         actionBtnHtml = `
           <button class="btn btn-secondary btn-sm install-engine-btn" data-engine="${eng.id}">
             📥 Install ${eng.name}
@@ -968,9 +1057,11 @@ class VoicesolateWizardApp {
           </div>
         </div>
 
-        <div class="train-progress-box" id="train_prog_${eng.id}" style="display:none; margin-bottom:8px;">
-          <div class="progress-track"><div class="progress-fill" style="width:50%;"></div></div>
-          <span style="font-size:11px; color:var(--accent-cyan);">Processing training...</span>
+        <div class="train-progress-box" id="train_prog_${eng.id}" style="${isTraining ? 'display:block;' : 'display:none;'} margin-bottom:8px;">
+          <div class="progress-track"><div class="progress-fill" id="train_fill_${eng.id}" style="width:${(this.trainingProgress && this.trainingProgress[eng.id]) || 25}%;"></div></div>
+          <span style="font-size:11px; color:var(--accent-cyan);" id="train_msg_${eng.id}">
+            ${(this.trainingMessage && this.trainingMessage[eng.id]) || 'Processing training...'}
+          </span>
         </div>
 
         <div style="display:flex; justify-content:flex-end; gap:8px;">
@@ -987,7 +1078,9 @@ class VoicesolateWizardApp {
     });
 
     container.querySelectorAll(".train-engine-btn").forEach(btn => {
-      btn.addEventListener("click", () => this.handleTrainEngine(btn.getAttribute("data-engine"), btn));
+      if (!btn.disabled) {
+        btn.addEventListener("click", () => this.handleTrainEngine(btn.getAttribute("data-engine"), btn));
+      }
     });
 
     // Check gating
@@ -1016,18 +1109,68 @@ class VoicesolateWizardApp {
   }
 
   async handleTrainEngine(engineId, btn) {
-    btn.disabled = true;
-    btn.innerText = `⏳ Training ${engineId}...`;
+    if (!this.activeTrainingEngines) this.activeTrainingEngines = new Set();
+    if (!this.trainingProgress) this.trainingProgress = {};
+    if (!this.trainingMessage) this.trainingMessage = {};
+
+    this.activeTrainingEngines.add(engineId);
+    this.trainingProgress[engineId] = 20;
+    this.trainingMessage[engineId] = `Initializing training for ${engineId.toUpperCase()}...`;
+
+    this.renderEngineCards(this.engines);
+
     try {
-      await api.trainModel({
+      const res = await api.trainModel({
         character_name: this.selectedCharacter,
         episode_name: this.episodeName,
         engine: engineId
       });
+      if (res && res.job_id) {
+        this.trackTrainingJob(res.job_id, engineId);
+      }
     } catch (err) {
       alert("Training trigger failed: " + err.message);
-      btn.disabled = false;
+      this.activeTrainingEngines.delete(engineId);
+      delete this.trainingProgress[engineId];
+      delete this.trainingMessage[engineId];
+      this.renderEngineCards(this.engines);
     }
+  }
+
+  trackTrainingJob(jobId, engineId) {
+    const pollInterval = setInterval(async () => {
+      try {
+        const job = await api.getJobStatus(jobId);
+        if (!job) return;
+
+        if (job.status === "running" || job.status === "queued") {
+          if (!this.trainingProgress) this.trainingProgress = {};
+          if (!this.trainingMessage) this.trainingMessage = {};
+          this.trainingProgress[engineId] = Math.max(20, job.progress || 20);
+          this.trainingMessage[engineId] = job.message || "Training in progress...";
+
+          const fill = document.getElementById(`train_fill_${engineId}`);
+          const msg = document.getElementById(`train_msg_${engineId}`);
+          if (fill) fill.style.width = `${this.trainingProgress[engineId]}%`;
+          if (msg) msg.innerText = this.trainingMessage[engineId];
+        } else if (job.status === "completed") {
+          clearInterval(pollInterval);
+          if (this.activeTrainingEngines) this.activeTrainingEngines.delete(engineId);
+          if (this.trainingProgress) delete this.trainingProgress[engineId];
+          if (this.trainingMessage) delete this.trainingMessage[engineId];
+          await this.onEnterStep3();
+        } else if (job.status === "failed" || job.status === "cancelled") {
+          clearInterval(pollInterval);
+          if (this.activeTrainingEngines) this.activeTrainingEngines.delete(engineId);
+          if (this.trainingProgress) delete this.trainingProgress[engineId];
+          if (this.trainingMessage) delete this.trainingMessage[engineId];
+          alert(`Training failed for ${engineId}: ${job.error || job.message}`);
+          await this.onEnterStep3();
+        }
+      } catch (e) {
+        console.warn("Polling error for job:", e);
+      }
+    }, 1000);
   }
 
   // ----------------- STEP 4: SYNTHESIS STUDIO -----------------
@@ -1257,6 +1400,29 @@ class VoicesolateWizardApp {
       document.getElementById("jobProgressFill").style.width = `${job.progress}%`;
       document.getElementById("jobPercentText").innerText = `${Math.round(job.progress)}%`;
       this.activeJobId = job.job_id;
+
+      // Real-time engine training progress card feedback
+      if (job.job_type === "train") {
+        const eng = (job.params?.engine || "").toLowerCase();
+        let targetEngId = null;
+        if (eng.includes("piper") || eng.includes("onnx")) targetEngId = "piper";
+        else if (eng.includes("xtts")) targetEngId = "xtts-v2";
+        else if (eng.includes("f5")) targetEngId = "f5-tts";
+
+        if (targetEngId) {
+          if (!this.activeTrainingEngines) this.activeTrainingEngines = new Set();
+          this.activeTrainingEngines.add(targetEngId);
+          if (!this.trainingProgress) this.trainingProgress = {};
+          if (!this.trainingMessage) this.trainingMessage = {};
+          this.trainingProgress[targetEngId] = Math.max(20, job.progress || 20);
+          this.trainingMessage[targetEngId] = job.message || "Training in progress...";
+
+          const fill = document.getElementById(`train_fill_${targetEngId}`);
+          const msg = document.getElementById(`train_msg_${targetEngId}`);
+          if (fill) fill.style.width = `${this.trainingProgress[targetEngId]}%`;
+          if (msg) msg.innerText = this.trainingMessage[targetEngId];
+        }
+      }
     } else if (job.status === "completed") {
       banner.classList.add("active");
       document.getElementById("jobTitleText").innerText = `✓ ${job.message}`;
@@ -1270,6 +1436,18 @@ class VoicesolateWizardApp {
         if (nextBtn) nextBtn.disabled = false;
         this.markStepCompleted(2);
       } else if (job.job_type === "train" || job.job_type === "install_engine") {
+        if (job.job_type === "train") {
+          const eng = (job.params?.engine || "").toLowerCase();
+          let targetEngId = null;
+          if (eng.includes("piper") || eng.includes("onnx")) targetEngId = "piper";
+          else if (eng.includes("xtts")) targetEngId = "xtts-v2";
+          else if (eng.includes("f5")) targetEngId = "f5-tts";
+          if (targetEngId && this.activeTrainingEngines) {
+            this.activeTrainingEngines.delete(targetEngId);
+            if (this.trainingProgress) delete this.trainingProgress[targetEngId];
+            if (this.trainingMessage) delete this.trainingMessage[targetEngId];
+          }
+        }
         // Re-render Step 3 cards
         this.onEnterStep3();
       }
@@ -1279,6 +1457,20 @@ class VoicesolateWizardApp {
       banner.classList.add("active");
       document.getElementById("jobTitleText").innerText = `❌ Error: ${job.error || job.message}`;
       document.getElementById("jobProgressFill").style.background = "var(--accent-rose)";
+
+      if (job.job_type === "train") {
+        const eng = (job.params?.engine || "").toLowerCase();
+        let targetEngId = null;
+        if (eng.includes("piper") || eng.includes("onnx")) targetEngId = "piper";
+        else if (eng.includes("xtts")) targetEngId = "xtts-v2";
+        else if (eng.includes("f5")) targetEngId = "f5-tts";
+        if (targetEngId && this.activeTrainingEngines) {
+          this.activeTrainingEngines.delete(targetEngId);
+          if (this.trainingProgress) delete this.trainingProgress[targetEngId];
+          if (this.trainingMessage) delete this.trainingMessage[targetEngId];
+        }
+        this.onEnterStep3();
+      }
     }
   }
 

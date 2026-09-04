@@ -387,20 +387,46 @@ def get_character_details(character_name: str, episode: Optional[str] = None):
     ref_prompts = engine_service.get_reference_prompts(char_dir)
     engines = engine_service.get_engines_status(char_dir)
 
-    # Dataset stats
+    # Dataset stats & clips
     piper_wavs = list((char_dir / "datasets" / "piper" / "wavs").glob("*.wav")) if (char_dir / "datasets" / "piper" / "wavs").exists() else []
     raw_wavs = list((char_dir / "raw").glob("*.wav")) if (char_dir / "raw").exists() else []
     enh_wavs = list((char_dir / "enhanced").glob("*.wav")) if (char_dir / "enhanced").exists() else []
-    total_clips = max(len(piper_wavs), len(enh_wavs), len(raw_wavs))
-    
+
+    char_clips = []
+    manifest_file = char_dir.parent / "manifest.json"
+    if manifest_file.exists():
+        try:
+            with open(manifest_file, "r", encoding="utf-8") as mf:
+                mdata = json.load(mf)
+            char_clips = [c for c in mdata.get("clips", []) if c.get("character", "").upper() == character_name.upper()]
+        except Exception as ex:
+            logger.debug(f"Could not load manifest for character details: {ex}")
+
+    total_clips = len(char_clips) if char_clips else max(len(piper_wavs), len(enh_wavs), len(raw_wavs))
+
+    total_duration_sec = 0.0
+    if char_clips:
+        total_duration_sec = sum(c.get("end_sec", 0.0) - c.get("start_sec", 0.0) for c in char_clips)
+    elif enh_wavs or raw_wavs:
+        try:
+            import soundfile as sf
+            wav_pool = enh_wavs if enh_wavs else raw_wavs
+            for w in wav_pool:
+                total_duration_sec += sf.info(str(w)).duration
+        except Exception:
+            total_duration_sec = total_clips * 3.2
+
     return {
         "character_name": character_name,
         "directory": str(char_dir.resolve()),
         "quotes": quotes,
         "reference_prompts": ref_prompts,
         "engines": engines,
+        "clips": char_clips,
         "dataset_stats": {
             "clip_count": total_clips,
+            "total_duration_sec": round(total_duration_sec, 2),
+            "total_duration_formatted": _format_speaking_time(total_duration_sec),
             "piper_dataset_ready": (char_dir / "datasets" / "piper" / "metadata.csv").exists(),
             "xtts_dataset_ready": (char_dir / "datasets" / "xtts" / "metadata.csv").exists(),
             "f5tts_dataset_ready": (char_dir / "datasets" / "f5tts" / "metadata.csv").exists()

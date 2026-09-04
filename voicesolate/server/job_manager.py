@@ -36,6 +36,7 @@ class JobRecord:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "error": self.error,
+            "params": self.params,
             "result": self.result,
             "workers": self.workers,
             "logs_count": len(self.logs),
