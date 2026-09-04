@@ -38,7 +38,7 @@ def parse_args():
     parser.add_argument("--no-web-ui", action="store_true", help="Do not launch Voice Studio Web UI at the end")
     parser.add_argument("--no-interactive", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--no-enhance", action="store_true", help="Skip ML vocal isolation and super-resolution enhancement")
-    parser.add_argument("--all-characters", action="store_true", help="Select all characters found in script")
+    parser.add_argument("--theme", default="ocean", choices=["ocean", "soft", "monochrome", "citrus", "glass", "default"], help="Gradio UI theme / skin (default: ocean)")
     parser.add_argument("--no-aggregate", action="store_true", help="Do not aggregate clips from other episodes in output directory for training datasets (default: aggregates all available clips for character)")
 
     # Granular Cache Bypass Controls (Additive & Re-entrant)
@@ -361,7 +361,7 @@ def main():
                 if not (args.no_web_ui or args.no_interactive):
                     from .voice_studio_gui import VoiceStudioGUI
                     gui = VoiceStudioGUI(char_dir)
-                    gui.launch(server_port=7860, inbrowser=True)
+                    gui.launch(server_port=7860, inbrowser=True, theme=args.theme)
                 else:
                     from rich.table import Table
                     table = Table(title=f"🎙️ Voicesolate Model Architecture Summary — {char_name}", border_style="cyan")
