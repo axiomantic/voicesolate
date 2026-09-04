@@ -63,6 +63,12 @@ class PipelineRequest(BaseModel):
     targets: List[str] = ["all"]
     no_train: bool = False
     no_aggregate: bool = False
+    similarity_threshold: float = 55.0
+    no_cache_stt: bool = False
+    no_cache_align: bool = False
+    no_cache_audio: bool = False
+    no_cache_enhance: bool = False
+    no_cache_script: bool = False
 
 class SynthesizeRequest(BaseModel):
     character_name: str
@@ -167,6 +173,18 @@ def install_engine(req: InstallEngineRequest, background_tasks: BackgroundTasks)
 
 # ----------------- SCRIPT DETECTION & UPLOAD -----------------
 
+def _format_speaking_time(seconds: float) -> str:
+    sec = max(0, int(round(seconds)))
+    if sec < 60:
+        return f"{sec}s"
+    mins = sec // 60
+    rem_sec = sec % 60
+    if mins < 60:
+        return f"{mins}m {rem_sec}s" if rem_sec > 0 else f"{mins}m"
+    hrs = mins // 60
+    rem_mins = mins % 60
+    return f"{hrs}h {rem_mins}m" if rem_mins > 0 else f"{hrs}h"
+
 @app.get("/api/v1/scripts/detect")
 def detect_script(filename: str):
     """
@@ -196,7 +214,9 @@ def detect_script(filename: str):
                         "name": c.name,
                         "lines": c.line_count,
                         "words": c.word_count,
-                        "estimated_duration_min": round(est_sec / 60.0, 1)
+                        "estimated_duration_sec": round(est_sec, 1),
+                        "estimated_duration_min": round(est_sec / 60.0, 1),
+                        "estimated_duration_formatted": _format_speaking_time(est_sec)
                     })
         except Exception as e:
             logger.warning(f"Script detection fetch failed: {e}")
@@ -233,7 +253,9 @@ async def upload_script(file: UploadFile = File(...)):
                 "name": c.name,
                 "lines": c.line_count,
                 "words": c.word_count,
-                "estimated_duration_min": round(est_sec / 60.0, 1)
+                "estimated_duration_sec": round(est_sec, 1),
+                "estimated_duration_min": round(est_sec / 60.0, 1),
+                "estimated_duration_formatted": _format_speaking_time(est_sec)
             })
 
     return {

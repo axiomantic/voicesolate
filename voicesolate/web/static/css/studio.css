@@ -307,6 +307,17 @@ body {
   color: #fff;
 }
 
+.btn-success {
+  background: var(--accent-emerald);
+  color: #fff;
+  border: 1px solid var(--accent-emerald);
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.3);
+}
+
+.btn-success:hover {
+  filter: brightness(1.1);
+}
+
 /* Active Job Banner */
 .job-banner {
   display: none;

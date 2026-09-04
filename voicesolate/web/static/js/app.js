@@ -155,7 +155,7 @@ class VoicesolateWizardApp {
     const scriptFileInput = document.getElementById("scriptFileInput");
     const browseScriptBtn = document.getElementById("browseScriptBtn");
     const dropzone = document.getElementById("scriptDropzone");
-    const charSelect = document.getElementById("wizardCharacterSelect");
+    const searchFilter = document.getElementById("characterSearchFilter");
     const nextBtn = document.getElementById("step1NextBtn");
     const resetBtn = document.getElementById("resetStep1Btn");
 
@@ -239,10 +239,17 @@ class VoicesolateWizardApp {
       });
     }
 
-    // Character Select
-    if (charSelect) {
-      charSelect.addEventListener("change", (e) => {
-        this.selectCharacter(e.target.value);
+    // Character Roster Search Filter
+    if (searchFilter) {
+      searchFilter.addEventListener("input", (e) => {
+        const query = (e.target.value || "").toLowerCase().trim();
+        const tbody = document.getElementById("wizardCharactersTbody");
+        if (tbody) {
+          tbody.querySelectorAll("tr").forEach(tr => {
+            const charName = (tr.getAttribute("data-char-name") || "").toLowerCase();
+            tr.style.display = !query || charName.includes(query) ? "" : "none";
+          });
+        }
       });
     }
 
@@ -350,68 +357,88 @@ class VoicesolateWizardApp {
 
   populateCharacterSelector(characters, preselectChar = null) {
     const container = document.getElementById("wizardCharacterContainer");
-    const select = document.getElementById("wizardCharacterSelect");
     const tbody = document.getElementById("wizardCharactersTbody");
-    if (!select || !container) return;
+    const searchFilter = document.getElementById("characterSearchFilter");
+    if (!container || !tbody) return;
 
-    select.innerHTML = '<option value="">-- Choose Character --</option>';
-    if (tbody) tbody.innerHTML = "";
+    if (searchFilter) searchFilter.value = "";
+    tbody.innerHTML = "";
 
     characters.forEach(c => {
-      const opt = document.createElement("option");
-      opt.value = c.name;
-      opt.innerText = `${c.name} (${c.lines} lines • ~${c.estimated_duration_min} min)`;
-      select.appendChild(opt);
-
-      if (tbody) {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td><strong>${c.name}</strong></td>
-          <td><span class="badge badge-ready">${c.lines} lines</span></td>
-          <td style="font-family:var(--font-mono); font-size:12px;">~${c.estimated_duration_min} min</td>
-          <td>
-            <button class="btn btn-secondary btn-sm select-char-row-btn" data-char="${c.name}" style="padding:2px 8px; font-size:11px;">Select</button>
-          </td>
-        `;
-        tbody.appendChild(tr);
-      }
+      const formattedDuration = c.estimated_duration_formatted || this.humanizeSpeakingTime(c.estimated_duration_sec || (c.lines * 3.2));
+      const tr = document.createElement("tr");
+      tr.setAttribute("data-char-name", c.name);
+      tr.style.transition = "background-color 0.2s ease";
+      tr.innerHTML = `
+        <td><strong>${this.escapeHtml(c.name)}</strong></td>
+        <td><span class="badge badge-ready">${c.lines} lines</span></td>
+        <td style="font-family:var(--font-mono); font-size:12px; color:var(--accent-cyan);">~${formattedDuration}</td>
+        <td>
+          <button type="button" class="btn btn-secondary btn-sm select-char-row-btn" data-char="${this.escapeHtml(c.name)}" style="padding:4px 12px; font-size:12px; font-weight:600; min-width:85px;">Select</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
     });
 
-    if (tbody) {
-      tbody.querySelectorAll(".select-char-row-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const name = btn.getAttribute("data-char");
-          select.value = name;
-          this.selectCharacter(name);
-        });
+    tbody.querySelectorAll(".select-char-row-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const name = btn.getAttribute("data-char");
+        this.selectCharacter(name);
       });
-    }
+    });
 
     container.style.display = "flex";
 
-    if (preselectChar) {
-      select.value = preselectChar;
-      this.selectCharacter(preselectChar);
+    const targetChar = preselectChar || this.selectedCharacter;
+    if (targetChar) {
+      this.selectCharacter(targetChar);
     }
   }
 
   selectCharacter(charName) {
     this.selectedCharacter = charName;
     const badge = document.getElementById("wizardCharStatsBadge");
-    const charObj = this.scriptCharacters.find(c => c.name.toUpperCase() === charName.toUpperCase());
+    const charObj = this.scriptCharacters.find(c => c.name.toUpperCase() === (charName || "").toUpperCase());
 
     if (badge) {
       if (charObj) {
-        badge.innerText = `✓ Selected: ${charObj.name} (${charObj.lines} dialogue lines)`;
+        const dur = charObj.estimated_duration_formatted || this.humanizeSpeakingTime(charObj.estimated_duration_sec || (charObj.lines * 3.2));
+        badge.innerText = `✓ Selected: ${charObj.name} (${charObj.lines} lines • ~${dur})`;
+        badge.style.display = "inline-block";
+      } else if (charName) {
+        badge.innerText = `✓ Selected: ${charName}`;
         badge.style.display = "inline-block";
       } else {
         badge.style.display = "none";
       }
     }
 
+    // Highlight row and toggle button state
+    const tbody = document.getElementById("wizardCharactersTbody");
+    if (tbody) {
+      tbody.querySelectorAll("tr").forEach(tr => {
+        const btn = tr.querySelector(".select-char-row-btn");
+        const rowChar = tr.getAttribute("data-char-name") || (btn ? btn.getAttribute("data-char") : "");
+        const isMatch = Boolean(charName && rowChar && rowChar.toUpperCase() === charName.toUpperCase());
+        if (isMatch) {
+          tr.style.backgroundColor = "rgba(16, 185, 129, 0.12)";
+          if (btn) {
+            btn.className = "btn btn-success btn-sm select-char-row-btn";
+            btn.innerHTML = "✓ Selected";
+          }
+        } else {
+          tr.style.backgroundColor = "";
+          if (btn) {
+            btn.className = "btn btn-secondary btn-sm select-char-row-btn";
+            btn.innerHTML = "Select";
+          }
+        }
+      });
+    }
+
     // Sync header dropdown if present
     const headerChar = document.getElementById("headerCharacterSelect");
-    if (headerChar) headerChar.value = charName;
+    if (headerChar) headerChar.value = charName || "";
 
     this.updateStep1Checklist();
   }
@@ -661,11 +688,31 @@ class VoicesolateWizardApp {
     if (demucsList) { demucsList.innerHTML = ""; demucsList.style.display = "none"; }
 
     try {
+      const minDurationInput = document.getElementById("step2MinDuration");
+      const minDuration = minDurationInput ? parseFloat(minDurationInput.value) || 3.0 : 3.0;
+
+      const enhanceInput = document.getElementById("step2EnhanceToggle");
+      const enhance = enhanceInput ? enhanceInput.checked : true;
+
+      const simThreshInput = document.getElementById("step2SimilarityThreshold");
+      const similarityThreshold = simThreshInput ? parseFloat(simThreshInput.value) || 55.0 : 55.0;
+
+      const noCacheStt = document.getElementById("step2BypassSttCache")?.checked || false;
+      const noCacheAlign = document.getElementById("step2BypassAlignCache")?.checked || false;
+      const noCacheAudio = document.getElementById("step2BypassAudioCache")?.checked || false;
+      const noCacheEnhance = document.getElementById("step2BypassEnhanceCache")?.checked || false;
+
       await api.runPipeline({
         input_path: this.mediaPath,
         script_path: this.episodeCode || null,
         characters: [this.selectedCharacter],
-        enhance: true,
+        min_duration: minDuration,
+        similarity_threshold: similarityThreshold,
+        enhance: enhance,
+        no_cache_stt: noCacheStt,
+        no_cache_align: noCacheAlign,
+        no_cache_audio: noCacheAudio,
+        no_cache_enhance: noCacheEnhance,
         targets: ["all"]
       });
       if (statusText) statusText.innerText = "⚡ Parallel search & neural isolation workers active...";
@@ -751,7 +798,8 @@ class VoicesolateWizardApp {
       if (details && details.dataset_stats) {
         const count = details.dataset_stats.clip_count || 0;
         document.getElementById("trainingClipsCount").innerText = count;
-        document.getElementById("trainingDurationText").innerText = `${round((count * 3.2) / 60.0, 1)} min`;
+        const totalSec = details.dataset_stats.total_duration_sec || (count * 3.2);
+        document.getElementById("trainingDurationText").innerText = this.humanizeSpeakingTime(totalSec);
       }
     } catch (err) {
       console.warn("Could not load character engine details:", err);
@@ -1413,6 +1461,22 @@ class VoicesolateWizardApp {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
+  }
+
+  humanizeSpeakingTime(seconds) {
+    if (!seconds || seconds <= 0) return "0s";
+    const sec = Math.round(seconds);
+    if (sec < 60) {
+      return `${sec}s`;
+    }
+    const mins = Math.floor(sec / 60);
+    const remSec = sec % 60;
+    if (mins < 60) {
+      return remSec > 0 ? `${mins}m ${remSec}s` : `${mins}m`;
+    }
+    const hrs = Math.floor(mins / 60);
+    const remMin = mins % 60;
+    return remMin > 0 ? `${hrs}h ${remMin}m` : `${hrs}h`;
   }
 
   escapeHtml(str) {

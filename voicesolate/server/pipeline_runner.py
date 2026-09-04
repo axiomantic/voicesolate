@@ -155,7 +155,13 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
 
         # Alignment
         job_manager.update_job(job_id, progress=25.0, stage="align", message="Executing search & divide-and-conquer alignment...")
-        cache_manager = CacheManager()
+        cache_manager = CacheManager(
+            use_cache_stt=not bool(params.get("no_cache_stt", False)),
+            use_cache_align=not bool(params.get("no_cache_align", False)),
+            use_cache_audio=not bool(params.get("no_cache_audio", False)),
+            use_cache_enhance=not bool(params.get("no_cache_enhance", False)),
+            use_cache_script=not bool(params.get("no_cache_script", False)),
+        )
         aligner = SearchAligner(extractor, cache_manager=cache_manager)
 
         # Build Stage A itemized queue
@@ -258,11 +264,13 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
             queue_items=stage_a_items
         )
 
+        similarity_thresh = float(params.get("similarity_threshold", 55.0))
         aligned_clips = aligner.align_character_dialogue(
             all_script_lines=script_lines,
             target_characters=target_chars,
             subtitles_path=active_subs,
             script_id=parser.script_id,
+            similarity_threshold=similarity_thresh,
             callback=on_align_step
         )
 
