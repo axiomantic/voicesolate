@@ -108,6 +108,14 @@ class VoicesolateAPI {
     return this.post("/api/v1/synthesize/batch", params);
   }
 
+  deleteSynthesis(identifier) {
+    return this.post("/api/v1/synthesis/delete", {
+      synth_id: identifier,
+      file_path: identifier,
+      filename: identifier
+    });
+  }
+
   // WebSocket Subscription
   subscribe(callback) {
     this.subscribers.add(callback);

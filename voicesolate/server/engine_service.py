@@ -556,6 +556,8 @@ class EngineService:
             "text": text.strip(),
             "speed": float(speed),
             "seed": int(seed) if seed is not None else 42,
+            "cfg_strength": float(cfg_strength) if cfg_strength is not None else 2.8,
+            "nfe_step": int(nfe_step) if nfe_step is not None else 32,
             "duration": round(info.duration, 2),
             "samplerate": info.samplerate,
             "created_at": time.time(),
@@ -578,7 +580,12 @@ class EngineService:
             "model_name": eng_meta["name"],
             "model_architecture": eng_meta["architecture"],
             "model_badge": eng_meta["badge"],
-            "text": text.strip()
+            "text": text.strip(),
+            "speed": float(speed),
+            "seed": int(seed) if seed is not None else 42,
+            "cfg_strength": float(cfg_strength) if cfg_strength is not None else 2.8,
+            "nfe_step": int(nfe_step) if nfe_step is not None else 32,
+            "created_at": meta_payload["created_at"]
         }
 
 engine_service = EngineService()

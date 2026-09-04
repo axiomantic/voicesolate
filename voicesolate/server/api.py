@@ -95,6 +95,11 @@ class BatchSynthesizeRequest(BaseModel):
     cfg_strength: float = 2.5
     nfe_step: int = 32
 
+class DeleteSynthesisRequest(BaseModel):
+    file_path: Optional[str] = None
+    synth_id: Optional[str] = None
+    filename: Optional[str] = None
+
 class TrainModelRequest(BaseModel):
     character_name: str
     episode_name: Optional[str] = None
@@ -465,6 +470,10 @@ def get_character_details(character_name: str, episode: Optional[str] = None):
                     "model_architecture": sidecar_data.get("model_architecture") or eng_meta["architecture"],
                     "model_badge": sidecar_data.get("model_badge") or eng_meta["badge"],
                     "text": sidecar_data.get("text", ""),
+                    "speed": sidecar_data.get("speed", 1.0),
+                    "seed": sidecar_data.get("seed", 42),
+                    "cfg_strength": sidecar_data.get("cfg_strength", 2.8),
+                    "nfe_step": sidecar_data.get("nfe_step", 32),
                     "created_at": sidecar_data.get("created_at", w.stat().st_mtime)
                 })
             except Exception:
@@ -580,6 +589,55 @@ def synthesize_batch(req: BatchSynthesizeRequest):
         "character": req.character_name,
         "text": req.text,
         "results": results
+    }
+
+@app.post("/api/v1/synthesis/delete")
+@app.delete("/api/v1/synthesis")
+def delete_synthesis(req: DeleteSynthesisRequest):
+    """
+    Deletes a synthesized audio file and its matching metadata JSON sidecar from the cache.
+    """
+    cache_dir = Path("cache/synthesized").resolve()
+    target_stem = None
+    if req.synth_id:
+        target_stem = req.synth_id
+    elif req.filename:
+        target_stem = Path(req.filename).stem
+    elif req.file_path:
+        target_stem = Path(req.file_path).stem
+
+    if not target_stem:
+        raise HTTPException(status_code=400, detail="Must provide synth_id, filename, or file_path")
+
+    clean_stem = Path(target_stem).name
+    deleted = []
+
+    for ext in [".wav", ".json"]:
+        target_file = cache_dir / f"{clean_stem}{ext}"
+        if target_file.exists() and target_file.is_file():
+            try:
+                target_file.unlink()
+                deleted.append(str(target_file))
+            except Exception as e:
+                logger.warning(f"Could not delete {target_file}: {e}")
+
+    if not deleted and req.file_path:
+        direct_p = Path(req.file_path)
+        if direct_p.exists() and direct_p.is_file():
+            try:
+                direct_p.unlink()
+                deleted.append(str(direct_p))
+                sidecar_p = direct_p.with_suffix(".json")
+                if sidecar_p.exists():
+                    sidecar_p.unlink()
+                    deleted.append(str(sidecar_p))
+            except Exception as e:
+                logger.warning(f"Could not delete direct file {direct_p}: {e}")
+
+    return {
+        "status": "deleted" if deleted else "not_found",
+        "synth_id": clean_stem,
+        "deleted": deleted
     }
 
 # ----------------- TRAINING & MODEL COMPILATION -----------------

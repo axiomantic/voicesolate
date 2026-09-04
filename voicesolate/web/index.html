@@ -556,49 +556,66 @@
 
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
               <div class="form-group">
-                <div style="display:flex; justify-content:space-between;">
-                  <label class="form-label" for="studioCfgRange" title="Classifier-Free Guidance. Higher values (2.8 - 4.0) force stronger accent adherence and persona exaggeration.">Accent / Persona Guidance (CFG)</label>
-                  <span id="studioCfgValue" style="font-size:12px; font-family:var(--font-mono); color:var(--accent-cyan);">2.80</span>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <label class="form-label" for="studioCfgRange" style="margin-bottom:0;">Accent / Persona Guidance (CFG)</label>
+                  <span id="studioCfgValue" style="font-size:12px; font-family:var(--font-mono); color:var(--accent-cyan); font-weight:600;">2.80</span>
                 </div>
-                <input type="range" id="studioCfgRange" min="1.0" max="5.0" step="0.1" value="2.8" style="accent-color:var(--accent-cyan);">
+                <div style="font-size:11px; color:var(--text-dim); margin:4px 0 6px 0; line-height:1.35;">
+                  <strong>What it does:</strong> Classifier-Free Guidance strength. Controls how strictly the diffusion model clamps onto the character's unique dialect, inflection, and timbre.<br>
+                  <strong>Impact:</strong> <span style="color:var(--accent-cyan);">Higher (3.2–5.0)</span> forces strong accent exaggeration and theatrical cadence. <span style="color:var(--text-muted);">Lower (&lt;2.2)</span> yields smoother, more generic diction. Values &gt; 5.0 can cause raspiness.
+                </div>
+                <input type="range" id="studioCfgRange" min="1.0" max="5.0" step="0.1" value="2.8" style="accent-color:var(--accent-cyan); width:100%;">
               </div>
 
               <div class="form-group">
-                <div style="display:flex; justify-content:space-between;">
-                  <label class="form-label" for="studioNfeRange" title="Number of diffusion ODE function evaluations. Higher values give richer acoustic texture and phoneme drawls.">Diffusion Steps (NFE)</label>
-                  <span id="studioNfeValue" style="font-size:12px; font-family:var(--font-mono); color:var(--accent-cyan);">32</span>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <label class="form-label" for="studioNfeRange" style="margin-bottom:0;">Diffusion Steps (NFE)</label>
+                  <span id="studioNfeValue" style="font-size:12px; font-family:var(--font-mono); color:var(--accent-cyan); font-weight:600;">32</span>
                 </div>
-                <input type="range" id="studioNfeRange" min="16" max="64" step="4" value="32" style="accent-color:var(--accent-cyan);">
+                <div style="font-size:11px; color:var(--text-dim); margin:4px 0 6px 0; line-height:1.35;">
+                  <strong>What it does:</strong> Number of Function Evaluations (ODE solver denoising steps).<br>
+                  <strong>Impact:</strong> <span style="color:var(--accent-cyan);">Higher (32–64)</span> yields crisp phonemes, breath texture, and high-frequency studio clarity. <span style="color:var(--text-muted);">Lower (16–24)</span> generates much faster with softer consonants.
+                </div>
+                <input type="range" id="studioNfeRange" min="16" max="64" step="4" value="32" style="accent-color:var(--accent-cyan); width:100%;">
               </div>
             </div>
 
             <!-- Model Selection Checkboxes -->
             <div class="form-group">
               <label class="form-label">Select Voice Models to Generate (Simultaneous Audition):</label>
-              <div class="engine-checkbox-row">
-                <label class="engine-checkbox-card" id="cardCheckF5">
-                  <input type="checkbox" id="checkEngineF5" value="f5-tts" checked>
-                  <div>
-                    <strong style="color:#fff; font-size:13px;">F5-TTS</strong>
-                    <div style="font-size:11px; color:var(--text-dim);">Diffusion (24kHz)</div>
-                  </div>
-                </label>
+              <div class="engine-checkbox-row" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px;">
+                <div class="engine-select-card-wrapper" id="cardWrapperF5">
+                  <label class="engine-checkbox-card" id="cardCheckF5" style="width:100%; margin:0;">
+                    <input type="checkbox" id="checkEngineF5" value="f5-tts" checked>
+                    <div>
+                      <strong style="color:#fff; font-size:13px;">F5-TTS</strong>
+                      <div style="font-size:11px; color:var(--text-dim);">Diffusion (24kHz)</div>
+                    </div>
+                  </label>
+                  <div class="engine-card-action" id="actionF5" style="margin-top:6px;"></div>
+                </div>
 
-                <label class="engine-checkbox-card" id="cardCheckXTTS">
-                  <input type="checkbox" id="checkEngineXTTS" value="xtts-v2" checked>
-                  <div>
-                    <strong style="color:#fff; font-size:13px;">Coqui XTTS-v2</strong>
-                    <div style="font-size:11px; color:var(--text-dim);">Autoregressive (24kHz)</div>
-                  </div>
-                </label>
+                <div class="engine-select-card-wrapper" id="cardWrapperXTTS">
+                  <label class="engine-checkbox-card" id="cardCheckXTTS" style="width:100%; margin:0;">
+                    <input type="checkbox" id="checkEngineXTTS" value="xtts-v2" checked>
+                    <div>
+                      <strong style="color:#fff; font-size:13px;">Coqui XTTS-v2</strong>
+                      <div style="font-size:11px; color:var(--text-dim);">Autoregressive (24kHz)</div>
+                    </div>
+                  </label>
+                  <div class="engine-card-action" id="actionXTTS" style="margin-top:6px;"></div>
+                </div>
 
-                <label class="engine-checkbox-card" id="cardCheckPiper">
-                  <input type="checkbox" id="checkEnginePiper" value="piper">
-                  <div>
-                    <strong style="color:#fff; font-size:13px;">Piper VITS</strong>
-                    <div style="font-size:11px; color:var(--text-dim);">Fast CPU (22.05kHz)</div>
-                  </div>
-                </label>
+                <div class="engine-select-card-wrapper" id="cardWrapperPiper">
+                  <label class="engine-checkbox-card" id="cardCheckPiper" style="width:100%; margin:0;">
+                    <input type="checkbox" id="checkEnginePiper" value="piper">
+                    <div>
+                      <strong style="color:#fff; font-size:13px;">Piper VITS</strong>
+                      <div style="font-size:11px; color:var(--text-dim);">Fast CPU (22.05kHz)</div>
+                    </div>
+                  </label>
+                  <div class="engine-card-action" id="actionPiper" style="margin-top:6px;"></div>
+                </div>
               </div>
             </div>
 

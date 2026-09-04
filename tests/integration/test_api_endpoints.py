@@ -90,6 +90,11 @@ class TestApiEndpoints:
                 assert "duration" in synth and isinstance(synth["duration"], (int, float))
                 assert "samplerate" in synth and isinstance(synth["samplerate"], int)
                 assert "url" in synth and synth["url"].startswith("/api/v1/audio/stream")
+                assert "speed" in synth and isinstance(synth["speed"], (int, float))
+                assert "cfg_strength" in synth and isinstance(synth["cfg_strength"], (int, float))
+                assert "nfe_step" in synth and isinstance(synth["nfe_step"], int)
+                assert "seed" in synth and isinstance(synth["seed"], int)
+                assert "text" in synth
                 assert "Previous Session" not in synth["model_name"]
 
         # 2. Negative control: Nonexistent character must return 200 with empty stats, not crash with 500
@@ -99,3 +104,33 @@ class TestApiEndpoints:
         assert ghost_data["character_name"] == "NONEXISTENT_GHOST_CHARACTER_999"
         assert ghost_data["dataset_stats"]["clip_count"] == 0
         assert ghost_data["quotes"] == []
+
+    def test_delete_synthesis_contract_and_negative_control(self, client: TestClient, tmp_path):
+        from pathlib import Path
+        cache_dir = Path("cache/synthesized").resolve()
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        test_wav = cache_dir / "test_synth_delete_sample.wav"
+        test_json = cache_dir / "test_synth_delete_sample.json"
+
+        # Create dummy sample
+        test_wav.write_bytes(b"RIFFdummywavdata")
+        test_json.write_text('{"synth_id": "test_synth_delete_sample"}', encoding="utf-8")
+        assert test_wav.exists()
+        assert test_json.exists()
+
+        # 1. Positive deletion case
+        del_res = client.post("/api/v1/synthesis/delete", json={"synth_id": "test_synth_delete_sample"})
+        assert del_res.status_code == 200
+        del_data = del_res.json()
+        assert del_data["status"] == "deleted"
+        assert not test_wav.exists()
+        assert not test_json.exists()
+
+        # 2. Idempotent / not_found case
+        del_res2 = client.post("/api/v1/synthesis/delete", json={"synth_id": "test_synth_delete_sample"})
+        assert del_res2.status_code == 200
+        assert del_res2.json()["status"] == "not_found"
+
+        # 3. Negative control: Empty body returns 400
+        bad_del = client.post("/api/v1/synthesis/delete", json={})
+        assert bad_del.status_code == 400

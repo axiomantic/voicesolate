@@ -1206,7 +1206,11 @@ class VoicesolateWizardApp {
             if (j.status === "completed") {
               clearInterval(poll);
               btn.innerText = `✓ Installed!`;
-              setTimeout(() => this.onEnterStep3(), 1000);
+              if (this.currentStep === 4) {
+                setTimeout(() => this.initStep4(), 1000);
+              } else {
+                setTimeout(() => this.onEnterStep3(), 1000);
+              }
             } else if (j.status === "failed") {
               clearInterval(poll);
               alert(`Installation failed for ${engineId}: ${j.error || j.message}`);
@@ -1400,33 +1404,76 @@ class VoicesolateWizardApp {
         });
       }
 
-      // Sync checkboxes with engine readiness
+      // Sync checkboxes with engine readiness & add install/train action buttons
       const engines = await api.getEngines(this.selectedCharacter, this.episodeName);
       engines.forEach(eng => {
         let chk = null;
         let card = null;
+        let actionEl = null;
         if (eng.id === "f5-tts") {
           chk = document.getElementById("checkEngineF5");
           card = document.getElementById("cardCheckF5");
+          actionEl = document.getElementById("actionF5");
         } else if (eng.id === "xtts-v2") {
           chk = document.getElementById("checkEngineXTTS");
           card = document.getElementById("cardCheckXTTS");
+          actionEl = document.getElementById("actionXTTS");
         } else if (eng.id === "piper") {
           chk = document.getElementById("checkEnginePiper");
           card = document.getElementById("cardCheckPiper");
+          actionEl = document.getElementById("actionPiper");
         }
 
-        if (chk && card) {
+        if (chk && card && actionEl) {
           const isUsable = eng.installed && (eng.trained || eng.ready);
           chk.disabled = !isUsable;
-          if (!isUsable) {
+
+          if (!eng.installed) {
             chk.checked = false;
-            card.style.opacity = "0.5";
-            card.title = `${eng.name} is not trained or installed. Train it in Step 3.`;
+            card.style.opacity = "0.65";
+            actionEl.innerHTML = `
+              <button class="btn btn-secondary btn-sm install-engine-btn" data-engine="${eng.id}" style="width:100%; padding:4px 6px; font-size:11px;">
+                📥 Install ${eng.name}
+              </button>
+            `;
+          } else if (eng.id === "piper" && !eng.trainer_installed) {
+            chk.checked = false;
+            card.style.opacity = "0.65";
+            actionEl.innerHTML = `
+              <button class="btn btn-warning btn-sm install-engine-btn" data-engine="piper-train" style="width:100%; padding:4px 6px; font-size:11px; background:#d97706; border-color:#b45309; color:#fff; font-weight:600;">
+                📥 Install piper-train
+              </button>
+            `;
+          } else if (!isUsable) {
+            chk.checked = false;
+            card.style.opacity = "0.65";
+            actionEl.innerHTML = `
+              <button class="btn btn-secondary btn-sm train-goto-step3-btn" data-engine="${eng.id}" style="width:100%; padding:4px 6px; font-size:11px;">
+                ⚡ Train in Step 3
+              </button>
+            `;
           } else {
             card.style.opacity = "1.0";
+            actionEl.innerHTML = `<div style="font-size:10px; color:var(--accent-green); text-align:center; padding-top:2px;">✓ Ready for audition</div>`;
           }
         }
+      });
+
+      // Bind dynamic install and train buttons in Step 4
+      document.querySelectorAll(".engine-checkbox-row .install-engine-btn").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const targetEngine = btn.getAttribute("data-engine");
+          this.handleInstallEngine(targetEngine, btn);
+        });
+      });
+      document.querySelectorAll(".engine-checkbox-row .train-goto-step3-btn").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.renderStep(3);
+        });
       });
 
       // Restore dialogue text if present
@@ -1442,10 +1489,14 @@ class VoicesolateWizardApp {
       // Restore player cards if grid is empty
       const grid = document.getElementById("multiPlayerGrid");
       if (grid && grid.children.length === 0) {
-        if (this.lastSynthesizedResults && Object.keys(this.lastSynthesizedResults).length > 0) {
-          this.renderSynthesizedPlayerCards(this.lastSynthesizedResults);
+        if (this.lastSynthesizedList && this.lastSynthesizedList.length > 0) {
+          this.lastSynthesizedList.forEach(item => {
+            grid.appendChild(this.createAudioPlayerCardElement(item));
+          });
         } else if (details?.cached_syntheses && details.cached_syntheses.length > 0) {
-          this.renderCachedSynthesesCards(details.cached_syntheses);
+          details.cached_syntheses.forEach(item => {
+            grid.appendChild(this.createAudioPlayerCardElement(item));
+          });
         }
       }
     } catch (err) {
@@ -1468,9 +1519,9 @@ class VoicesolateWizardApp {
 
     // Determine checked engines
     const checkedEngines = [];
-    if (document.getElementById("checkEngineF5").checked) checkedEngines.push("f5-tts");
-    if (document.getElementById("checkEngineXTTS").checked) checkedEngines.push("xtts-v2");
-    if (document.getElementById("checkEnginePiper").checked) checkedEngines.push("piper");
+    if (document.getElementById("checkEngineF5")?.checked) checkedEngines.push("f5-tts");
+    if (document.getElementById("checkEngineXTTS")?.checked) checkedEngines.push("xtts-v2");
+    if (document.getElementById("checkEnginePiper")?.checked) checkedEngines.push("piper");
 
     if (checkedEngines.length === 0) {
       alert("Please select at least one voice model checkbox to generate.");
@@ -1481,31 +1532,43 @@ class VoicesolateWizardApp {
     synthBtn.disabled = true;
     synthBtn.innerHTML = "⏳ Synthesizing Voice Models...";
 
-    // Setup player cards in grid
+    // Prepend new live generating cards so previously generated cards stay visible!
     const grid = document.getElementById("multiPlayerGrid");
-    grid.innerHTML = "";
+    const batchTimestamp = Date.now();
 
-    checkedEngines.forEach(eng => {
+    checkedEngines.slice().reverse().forEach(eng => {
       const info = this.formatEngineDisplay(eng);
+      const cardId = `player_card_${eng}_${batchTimestamp}`;
       const card = document.createElement("div");
       card.className = "audio-player-card";
-      card.id = `player_card_${eng}`;
+      card.id = cardId;
       card.style.borderColor = info.color;
       card.style.background = "var(--bg-surface-elevated, #161c28)";
       card.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-          <div>
+          <div style="flex:1; min-width:0; padding-right:12px;">
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
               <strong style="color:${info.color}; font-size:14px;">${info.icon} ${info.display}</strong>
               <span class="badge" style="background:rgba(255,255,255,0.08); color:var(--text-main); font-size:10px; padding:2px 6px;">${info.architecture}</span>
             </div>
-            <div style="font-size:11px; color:var(--text-dim); margin-top:4px;" id="meta_${eng}">Synthesizing with <strong>${info.name}</strong>...</div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:4px;" id="meta_${cardId}">Synthesizing with <strong>${info.name}</strong>...</div>
+            <div style="font-size:12px; color:#e2e8f0; margin:6px 0; padding:6px 8px; background:rgba(0,0,0,0.25); border-left:2px solid ${info.color}; border-radius:4px; font-style:italic; line-height:1.4; word-break:break-word;">
+              "${text}"
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
+              <span class="badge" style="font-size:10px; background:rgba(255,255,255,0.06); color:var(--text-dim);">⚡ Speed: ${speed.toFixed(2)}x</span>
+              <span class="badge" style="font-size:10px; background:rgba(255,255,255,0.06); color:var(--text-dim);">🎛️ CFG: ${cfgStrength.toFixed(2)}</span>
+              <span class="badge" style="font-size:10px; background:rgba(255,255,255,0.06); color:var(--text-dim);">🔄 NFE: ${nfeStep} steps</span>
+              <span class="badge" style="font-size:10px; background:rgba(255,255,255,0.06); color:var(--text-dim);">🎲 Seed: ${seed}</span>
+            </div>
           </div>
-          <span class="badge badge-ready" id="badge_${eng}">Generating</span>
+          <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;" id="actions_${cardId}">
+            <span class="badge badge-ready" id="badge_${cardId}">Generating</span>
+          </div>
         </div>
-        <audio id="audio_${eng}" controls style="width:100%; margin-top:10px;"></audio>
+        <audio id="audio_${cardId}" controls style="width:100%; margin-top:10px;"></audio>
       `;
-      grid.appendChild(card);
+      grid.prepend(card);
     });
 
     try {
@@ -1523,9 +1586,12 @@ class VoicesolateWizardApp {
 
       // Update player cards with results
       Object.entries(batchRes.results).forEach(([eng, res]) => {
-        const audioEl = document.getElementById(`audio_${eng}`);
-        const metaEl = document.getElementById(`meta_${eng}`);
-        const badgeEl = document.getElementById(`badge_${eng}`);
+        const cardId = `player_card_${eng}_${batchTimestamp}`;
+        const cardEl = document.getElementById(cardId);
+        const audioEl = document.getElementById(`audio_${cardId}`);
+        const metaEl = document.getElementById(`meta_${cardId}`);
+        const badgeEl = document.getElementById(`badge_${cardId}`);
+        const actionsEl = document.getElementById(`actions_${cardId}`);
         const info = this.formatEngineDisplay(eng);
         const modelName = res.model_name || info.name;
         const badgeText = res.model_badge || info.badge;
@@ -1539,17 +1605,48 @@ class VoicesolateWizardApp {
             badgeEl.innerText = `${badgeText} Ready`;
             badgeEl.className = "badge badge-ready";
           }
+          if (actionsEl && !actionsEl.querySelector(".delete-synth-btn")) {
+            const delBtn = document.createElement("button");
+            delBtn.className = "btn btn-secondary btn-sm delete-synth-btn";
+            delBtn.title = "Delete this synthesis";
+            delBtn.style.cssText = "padding:4px 8px; font-size:12px; color:var(--accent-red); border-color:rgba(239,68,68,0.3); background:rgba(239,68,68,0.1); cursor:pointer;";
+            delBtn.innerText = "🗑️";
+            delBtn.addEventListener("click", () => this.handleDeleteSynthesis(res.synth_id || res.file_path, cardEl));
+            actionsEl.appendChild(delBtn);
+          }
         } else {
           if (metaEl) metaEl.innerText = `❌ ${modelName} Error: ${res.error}`;
           if (badgeEl) {
             badgeEl.innerText = `${badgeText} Failed`;
             badgeEl.className = "badge badge-locked";
           }
+          if (actionsEl && !actionsEl.querySelector(".delete-synth-btn")) {
+            const delBtn = document.createElement("button");
+            delBtn.className = "btn btn-secondary btn-sm delete-synth-btn";
+            delBtn.title = "Dismiss";
+            delBtn.style.cssText = "padding:4px 8px; font-size:12px; color:var(--text-dim); cursor:pointer;";
+            delBtn.innerText = "✕";
+            delBtn.addEventListener("click", () => cardEl.remove());
+            actionsEl.appendChild(delBtn);
+          }
         }
       });
 
       if (batchRes && batchRes.results) {
-        this.lastSynthesizedResults = batchRes.results;
+        this.lastSynthesizedList = this.lastSynthesizedList || [];
+        Object.entries(batchRes.results).forEach(([eng, res]) => {
+          if (res.status === "success") {
+            this.lastSynthesizedList.unshift({
+              ...res,
+              engine: eng,
+              text: text,
+              speed: speed,
+              seed: seed,
+              cfg_strength: cfgStrength,
+              nfe_step: nfeStep
+            });
+          }
+        });
         this.markStepCompleted(4);
       }
     } catch (err) {
@@ -1604,46 +1701,89 @@ class VoicesolateWizardApp {
     };
   }
 
+  createAudioPlayerCardElement(item) {
+    const info = this.formatEngineDisplay(item.engine);
+    const card = document.createElement("div");
+    card.className = "audio-player-card";
+    const cardUniqueId = item.synth_id || `synth_${Math.random().toString(36).slice(2, 9)}`;
+    card.id = `player_card_${cardUniqueId}`;
+    card.style.borderColor = "rgba(255,255,255,0.18)";
+    card.style.background = "var(--bg-surface-elevated, #161c28)";
+
+    const modelName = item.model_name || info.name;
+    const modelDisplay = item.engine_display || info.display;
+    const architecture = item.model_architecture || info.architecture;
+    const badgeText = item.model_badge || info.badge;
+    const textSnippet = item.text || "Spoken dialogue clip";
+    const speedVal = item.speed !== undefined ? Number(item.speed).toFixed(2) : "1.00";
+    const cfgVal = item.cfg_strength !== undefined ? Number(item.cfg_strength).toFixed(2) : "2.80";
+    const nfeVal = item.nfe_step !== undefined ? item.nfe_step : 32;
+    const seedVal = item.seed !== undefined ? item.seed : 42;
+
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div style="flex:1; min-width:0; padding-right:12px;">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <strong style="color:${info.color}; font-size:14px;">${info.icon} ${modelDisplay}</strong>
+            <span class="badge" style="background:rgba(255,255,255,0.08); color:var(--text-main); font-size:10px; padding:2px 6px;">${architecture}</span>
+          </div>
+          <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">
+            Model: <strong style="color:#fff;">${modelName}</strong> • ${item.duration}s • ${item.samplerate}Hz • Cached Session
+          </div>
+          <div style="font-size:12px; color:#e2e8f0; margin:6px 0; padding:6px 8px; background:rgba(0,0,0,0.25); border-left:2px solid ${info.color}; border-radius:4px; font-style:italic; line-height:1.4; word-break:break-word;">
+            "${textSnippet}"
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
+            <span class="badge" style="font-size:10px; background:rgba(255,255,255,0.06); color:var(--text-dim);">⚡ Speed: ${speedVal}x</span>
+            <span class="badge" style="font-size:10px; background:rgba(255,255,255,0.06); color:var(--text-dim);">🎛️ CFG: ${cfgVal}</span>
+            <span class="badge" style="font-size:10px; background:rgba(255,255,255,0.06); color:var(--text-dim);">🔄 NFE: ${nfeVal} steps</span>
+            <span class="badge" style="font-size:10px; background:rgba(255,255,255,0.06); color:var(--text-dim);">🎲 Seed: ${seedVal}</span>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+          <span class="badge badge-ready" style="background:rgba(34, 197, 94, 0.15); border:1px solid rgba(34,197,94,0.3); color:#4ade80;">
+            ${badgeText}
+          </span>
+          <button class="btn btn-secondary btn-sm delete-synth-btn" title="Delete this synthesis" style="padding:4px 8px; font-size:12px; color:var(--accent-red); border-color:rgba(239,68,68,0.3); background:rgba(239,68,68,0.1); cursor:pointer;">
+            🗑️
+          </button>
+        </div>
+      </div>
+      <audio controls src="${item.url}" style="width:100%; margin-top:10px;"></audio>
+    `;
+
+    const delBtn = card.querySelector(".delete-synth-btn");
+    delBtn.addEventListener("click", () => this.handleDeleteSynthesis(item.synth_id || item.file_path || item.filename, card));
+
+    return card;
+  }
+
+  async handleDeleteSynthesis(identifier, cardElement) {
+    if (!confirm("Delete this synthesized audio file and its metadata?")) {
+      return;
+    }
+    try {
+      await api.deleteSynthesis(identifier);
+      if (cardElement) {
+        cardElement.style.transition = "all 0.3s ease";
+        cardElement.style.opacity = "0";
+        cardElement.style.transform = "translateY(-10px)";
+        setTimeout(() => cardElement.remove(), 300);
+      }
+      if (this.lastSynthesizedList) {
+        this.lastSynthesizedList = this.lastSynthesizedList.filter(s => s.synth_id !== identifier && s.file_path !== identifier);
+      }
+    } catch (err) {
+      alert("Failed to delete synthesis: " + err.message);
+    }
+  }
+
   renderSynthesizedPlayerCards(results) {
     const grid = document.getElementById("multiPlayerGrid");
     if (!grid) return;
     grid.innerHTML = "";
-
     Object.entries(results).forEach(([eng, res]) => {
-      const info = this.formatEngineDisplay(res.engine || eng);
-      const isSuccess = res.status === "success";
-      const card = document.createElement("div");
-      card.className = "audio-player-card";
-      card.id = `player_card_${eng}`;
-      card.style.borderColor = isSuccess ? info.color : "var(--accent-red)";
-      card.style.background = "var(--bg-surface-elevated, #161c28)";
-
-      const modelName = res.model_name || info.name;
-      const modelDisplay = res.engine_display || info.display;
-      const architecture = res.model_architecture || info.architecture;
-      const badgeText = res.model_badge || info.badge;
-
-      card.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-          <div>
-            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <strong style="color:${info.color}; font-size:14px;">${info.icon} ${modelDisplay}</strong>
-              <span class="badge" style="background:rgba(255,255,255,0.08); color:var(--text-main); font-size:10px; padding:2px 6px;">${architecture}</span>
-            </div>
-            <div style="font-size:11px; color:var(--text-dim); margin-top:4px;" id="meta_${eng}">
-              ${isSuccess 
-                ? `<span style="color:var(--accent-green);">✓ Synthesized</span> • Model: <strong style="color:#fff;">${modelName}</strong> • ${res.duration}s • ${res.samplerate}Hz` 
-                : `<span style="color:var(--accent-red);">❌ ${modelName} Error:</span> ${res.error || 'Failed'}`}
-            </div>
-            ${res.text ? `<div style="font-size:11px; color:var(--text-muted); margin-top:4px; font-style:italic;">"${res.text.slice(0, 90)}${res.text.length > 90 ? '...' : ''}"</div>` : ''}
-          </div>
-          <span class="badge ${isSuccess ? 'badge-ready' : 'badge-locked'}" id="badge_${eng}">
-            ${isSuccess ? `${badgeText} Ready` : 'Failed'}
-          </span>
-        </div>
-        <audio id="audio_${eng}" controls src="${res.url || ''}" style="width:100%; margin-top:10px;"></audio>
-      `;
-      grid.appendChild(card);
+      grid.appendChild(this.createAudioPlayerCardElement({ ...res, engine: eng }));
     });
   }
 
@@ -1651,39 +1791,8 @@ class VoicesolateWizardApp {
     const grid = document.getElementById("multiPlayerGrid");
     if (!grid) return;
     grid.innerHTML = "";
-
-    cachedList.forEach((item, idx) => {
-      const info = this.formatEngineDisplay(item.engine);
-      const card = document.createElement("div");
-      card.className = "audio-player-card";
-      card.id = `player_card_cached_${idx}`;
-      card.style.borderColor = "rgba(255,255,255,0.18)";
-      card.style.background = "var(--bg-surface-elevated, #161c28)";
-
-      const modelName = item.model_name || info.name;
-      const modelDisplay = item.engine_display || info.display;
-      const architecture = item.model_architecture || info.architecture;
-      const badgeText = item.model_badge || info.badge;
-
-      card.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-          <div>
-            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <strong style="color:${info.color}; font-size:14px;">${info.icon} ${modelDisplay}</strong>
-              <span class="badge" style="background:rgba(255,255,255,0.08); color:var(--text-main); font-size:10px; padding:2px 6px;">${architecture}</span>
-            </div>
-            <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">
-              Model: <strong style="color:#fff;">${modelName}</strong> • ${item.duration}s • ${item.samplerate}Hz • Cached Session
-            </div>
-            ${item.text ? `<div style="font-size:11px; color:var(--text-muted); margin-top:4px; font-style:italic;">"${item.text.slice(0, 90)}${item.text.length > 90 ? '...' : ''}"</div>` : ''}
-          </div>
-          <span class="badge badge-ready" style="background:rgba(34, 197, 94, 0.15); border:1px solid rgba(34,197,94,0.3); color:#4ade80;">
-            ${badgeText}
-          </span>
-        </div>
-        <audio controls src="${item.url}" style="width:100%; margin-top:10px;"></audio>
-      `;
-      grid.appendChild(card);
+    cachedList.forEach(item => {
+      grid.appendChild(this.createAudioPlayerCardElement(item));
     });
   }
 
