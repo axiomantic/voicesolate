@@ -1200,6 +1200,22 @@ class VoicesolateWizardApp {
       });
     }
 
+    const cfgRange = document.getElementById("studioCfgRange");
+    const cfgVal = document.getElementById("studioCfgValue");
+    if (cfgRange && cfgVal) {
+      cfgRange.addEventListener("input", (e) => {
+        cfgVal.innerText = parseFloat(e.target.value).toFixed(2);
+      });
+    }
+
+    const nfeRange = document.getElementById("studioNfeRange");
+    const nfeVal = document.getElementById("studioNfeValue");
+    if (nfeRange && nfeVal) {
+      nfeRange.addEventListener("input", (e) => {
+        nfeVal.innerText = parseInt(e.target.value, 10);
+      });
+    }
+
     if (quoteSelect) {
       quoteSelect.addEventListener("change", (e) => {
         const idx = parseInt(e.target.value, 10);
@@ -1246,6 +1262,19 @@ class VoicesolateWizardApp {
         });
       }
 
+      // Populate reference audio prompts dropdown
+      this.referencePrompts = details.reference_prompts || [];
+      const refSelect = document.getElementById("studioRefAudioSelect");
+      if (refSelect) {
+        refSelect.innerHTML = '<option value="">Default Reference Audio (High SNR ref.wav)</option>';
+        this.referencePrompts.forEach(p => {
+          const opt = document.createElement("option");
+          opt.value = p.path;
+          opt.innerText = `${p.name} (${p.duration}s)`;
+          refSelect.appendChild(opt);
+        });
+      }
+
       // Sync checkboxes with engine readiness
       const engines = await api.getEngines(this.selectedCharacter, this.episodeName);
       engines.forEach(eng => {
@@ -1283,6 +1312,9 @@ class VoicesolateWizardApp {
     const text = document.getElementById("studioDialogueText").value.trim();
     const speed = parseFloat(document.getElementById("studioSpeedRange").value) || 1.0;
     const seed = parseInt(document.getElementById("studioSeedInput").value, 10) || 42;
+    const cfgStrength = parseFloat(document.getElementById("studioCfgRange")?.value) || 2.8;
+    const nfeStep = parseInt(document.getElementById("studioNfeRange")?.value, 10) || 32;
+    const refAudioPath = document.getElementById("studioRefAudioSelect")?.value || null;
 
     if (!text) {
       alert("Please enter dialogue text to synthesize.");
@@ -1333,7 +1365,10 @@ class VoicesolateWizardApp {
         engines: checkedEngines,
         text: text,
         speed: speed,
-        seed: seed
+        seed: seed,
+        ref_audio_path: refAudioPath,
+        cfg_strength: cfgStrength,
+        nfe_step: nfeStep
       });
 
       // Update player cards with results

@@ -81,6 +81,8 @@ class SynthesizeRequest(BaseModel):
     speed: float = 1.0
     seed: int = 42
     ref_audio_path: Optional[str] = None
+    cfg_strength: float = 2.5
+    nfe_step: int = 32
 
 class BatchSynthesizeRequest(BaseModel):
     character_name: str
@@ -90,6 +92,8 @@ class BatchSynthesizeRequest(BaseModel):
     speed: float = 1.0
     seed: int = 42
     ref_audio_path: Optional[str] = None
+    cfg_strength: float = 2.5
+    nfe_step: int = 32
 
 class TrainModelRequest(BaseModel):
     character_name: str
@@ -476,7 +480,9 @@ def synthesize_speech(req: SynthesizeRequest):
             text=req.text,
             speed=req.speed,
             seed=req.seed,
-            ref_audio_path=req.ref_audio_path
+            ref_audio_path=req.ref_audio_path,
+            cfg_strength=req.cfg_strength,
+            nfe_step=req.nfe_step
         )
         return res
     except Exception as e:
@@ -501,7 +507,9 @@ def synthesize_batch(req: BatchSynthesizeRequest):
                 text=req.text,
                 speed=req.speed,
                 seed=req.seed,
-                ref_audio_path=req.ref_audio_path
+                ref_audio_path=req.ref_audio_path,
+                cfg_strength=req.cfg_strength,
+                nfe_step=req.nfe_step
             )
             results[eng] = {"status": "success", **res}
         except Exception as e:

@@ -253,21 +253,35 @@ class EngineService:
                 "duration": round(dur, 2)
             })
 
-        # Check raw or enhanced clips
-        enhanced_dir = cdir / "enhanced"
-        if enhanced_dir.exists():
-            for f in list(enhanced_dir.glob("*.wav"))[:10]:
-                try:
-                    dur = sf.info(str(f)).duration
-                    prompts.append({
-                        "id": f.stem,
-                        "name": f"Isolated Stem: {f.stem[:25]}",
-                        "path": str(f),
-                        "text": "",
-                        "duration": round(dur, 2)
-                    })
-                except Exception:
-                    pass
+        # Check dataset clips with transcripts
+        meta_csv = cdir / "datasets" / "piper" / "metadata.csv"
+        wavs_dir = cdir / "datasets" / "piper" / "wavs"
+        if meta_csv.exists() and wavs_dir.exists():
+            try:
+                with open(meta_csv, "r", encoding="utf-8") as f:
+                    for line in f:
+                        parts = line.strip().split("|")
+                        if len(parts) >= 2:
+                            clip_id = parts[0]
+                            quote = parts[1]
+                            wav_path = wavs_dir / f"{clip_id}.wav"
+                            if wav_path.exists():
+                                try:
+                                    dur = sf.info(str(wav_path)).duration
+                                    if 3.0 <= dur <= 14.0:
+                                        prompts.append({
+                                            "id": clip_id,
+                                            "name": f"Dialogue ({round(dur, 1)}s): \"{quote[:35]}...\"",
+                                            "path": str(wav_path.resolve()),
+                                            "text": quote,
+                                            "duration": round(dur, 2)
+                                        })
+                                        if len(prompts) >= 15:
+                                            break
+                                except Exception:
+                                    pass
+            except Exception as e:
+                logger.debug(f"Error reading dataset prompts: {e}")
 
         return prompts
 
@@ -319,7 +333,9 @@ class EngineService:
         text: str,
         speed: float = 1.0,
         seed: int = 42,
-        ref_audio_path: Optional[str] = None
+        ref_audio_path: Optional[str] = None,
+        cfg_strength: float = 2.5,
+        nfe_step: int = 32
     ) -> Dict[str, Any]:
         """
         Executes in-process synthesis with selected engine.
@@ -346,6 +362,29 @@ class EngineService:
                     ref_txt = f5_txt_p.read_text(encoding="utf-8").strip() if f5_txt_p.exists() else ""
                 else:
                     raise FileNotFoundError("Reference voice prompt audio not found for F5-TTS.")
+            else:
+                # Dynamically resolve reference transcript from metadata if custom ref clip passed
+                wav_stem = Path(ref_wav).stem
+                wav_name = Path(ref_wav).name
+                for meta_candidate in [
+                    cdir / "datasets" / "f5tts" / "metadata.csv",
+                    cdir / "datasets" / "piper" / "metadata.csv",
+                ]:
+                    if not ref_txt and meta_candidate.exists():
+                        try:
+                            with open(meta_candidate, "r", encoding="utf-8") as f:
+                                for line in f:
+                                    if wav_name in line or wav_stem in line:
+                                        parts = line.strip().split("|")
+                                        if len(parts) >= 2:
+                                            ref_txt = parts[1].strip()
+                                            break
+                        except Exception:
+                            pass
+                if not ref_txt:
+                    txt_companion = Path(ref_wav).with_suffix(".txt")
+                    if txt_companion.exists():
+                        ref_txt = txt_companion.read_text(encoding="utf-8").strip()
 
             model = self._get_f5_model()
 
@@ -357,7 +396,9 @@ class EngineService:
                 gen_text=text.strip(),
                 file_wave=str(out_wav),
                 speed=float(speed),
-                seed=safe_seed
+                seed=safe_seed,
+                cfg_strength=float(cfg_strength),
+                nfe_step=int(nfe_step)
             )
 
         elif "xtts" in engine_clean or "coqui" in engine_clean:

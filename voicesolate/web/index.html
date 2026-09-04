@@ -530,6 +530,15 @@
               <textarea id="studioDialogueText" class="form-textarea" placeholder="Enter dialogue for the character to speak..."></textarea>
             </div>
 
+            <div class="form-group">
+              <label class="form-label" for="studioRefAudioSelect">
+                Reference Audio Voice Prompt (Accent &amp; Timbre Guide):
+              </label>
+              <select id="studioRefAudioSelect" class="form-select">
+                <option value="">Default Reference Audio (High SNR ref.wav)</option>
+              </select>
+            </div>
+
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
               <div class="form-group">
                 <div style="display:flex; justify-content:space-between;">
@@ -542,6 +551,24 @@
               <div class="form-group">
                 <label class="form-label" for="studioSeedInput">Random Seed</label>
                 <input type="number" id="studioSeedInput" class="form-input" value="42">
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+              <div class="form-group">
+                <div style="display:flex; justify-content:space-between;">
+                  <label class="form-label" for="studioCfgRange" title="Classifier-Free Guidance. Higher values (2.8 - 4.0) force stronger accent adherence and persona exaggeration.">Accent / Persona Guidance (CFG)</label>
+                  <span id="studioCfgValue" style="font-size:12px; font-family:var(--font-mono); color:var(--accent-cyan);">2.80</span>
+                </div>
+                <input type="range" id="studioCfgRange" min="1.0" max="5.0" step="0.1" value="2.8" style="accent-color:var(--accent-cyan);">
+              </div>
+
+              <div class="form-group">
+                <div style="display:flex; justify-content:space-between;">
+                  <label class="form-label" for="studioNfeRange" title="Number of diffusion ODE function evaluations. Higher values give richer acoustic texture and phoneme drawls.">Diffusion Steps (NFE)</label>
+                  <span id="studioNfeValue" style="font-size:12px; font-family:var(--font-mono); color:var(--accent-cyan);">32</span>
+                </div>
+                <input type="range" id="studioNfeRange" min="16" max="64" step="4" value="32" style="accent-color:var(--accent-cyan);">
               </div>
             </div>
 
