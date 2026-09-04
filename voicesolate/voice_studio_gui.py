@@ -436,6 +436,71 @@ class VoiceStudioGUI:
             font-style: italic;
         }
 
+        /* =========================================================================
+           AUDIO PLAYER COMPACT & SLEEK STYLING (KILL GIANT MUSIC NOTE SVG)
+           ========================================================================= */
+        /* Completely eliminate the absurd giant music note placeholder / empty artwork */
+        div[aria-label="Empty value"],
+        .empty,
+        .empty.svelte-v95lt3,
+        .icon.svelte-v95lt3,
+        svg.feather-music,
+        .feather-music,
+        [data-testid="audio"] div[aria-label="Empty value"],
+        [data-testid="audio"] .empty,
+        [data-testid="audio"] svg.feather-music,
+        .audio-container div[aria-label="Empty value"],
+        .audio-container svg.feather-music {
+            display: none !important;
+            height: 0px !important;
+            min-height: 0px !important;
+            max-height: 0px !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            opacity: 0 !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+        }
+
+        /* Constrain audio container to compact, professional waveform player */
+        [data-testid="audio"],
+        .audio-container,
+        .audio-container.svelte-ocxd3m {
+            height: auto !important;
+            min-height: 0 !important;
+            background: #0f172a !important;
+            border: 1px solid #334155 !important;
+            border-radius: 8px !important;
+            padding: 0.6rem 0.8rem !important;
+        }
+
+        .component-wrapper.svelte-1ffmt2w {
+            padding: 0 !important;
+            width: 100% !important;
+        }
+
+        .waveform-container,
+        .waveform-container.svelte-1ffmt2w {
+            height: 48px !important;
+            min-height: 48px !important;
+            margin: 0.25rem 0 !important;
+        }
+
+        #waveform,
+        #waveform.svelte-1ffmt2w {
+            height: 48px !important;
+        }
+
+        .controls.svelte-72dh9g {
+            margin-top: 0.25rem !important;
+        }
+
+        /* Top-right icon buttons inside audio component (download / share) */
+        .icon-buttons,
+        [data-testid="audio"] .icon-buttons {
+            margin-bottom: 0.25rem !important;
+        }
+
         /* Primary action button: distinct, unambiguous call-to-action */
         #synth-btn {
             background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
