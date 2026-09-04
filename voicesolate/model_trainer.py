@@ -50,6 +50,10 @@ class ModelTrainer:
         if not has_piper_train:
             console.print("[yellow]Notice: 'piper_train' CLI not found in PATH. Created Piper training configuration & LJSpeech dataset.[/yellow]")
             console.print(f"[green]✓ Piper dataset ready for training: {piper_dataset_dir}[/green]")
+            # Ensure an ONNX baseline model exists so Piper can be used for CPU synthesis in Step 4
+            existing_onnx = list(out_model_dir.glob("*.onnx"))
+            if not existing_onnx:
+                self._download_base_piper_voice(out_model_dir, base_voice)
             return out_model_dir
 
         try:
@@ -136,3 +140,29 @@ class ModelTrainer:
             if res: results["f5tts"] = res
 
         return results
+
+    def _download_base_piper_voice(self, out_dir: Path, base_voice: str = "en_US-bryce-medium"):
+        """Downloads a pre-trained baseline Piper ONNX model & config for fast local CPU synthesis."""
+        import urllib.request
+        try:
+            parts = base_voice.split("-")
+            if len(parts) >= 3:
+                lang_region = parts[0]
+                speaker = parts[1]
+                quality = parts[2]
+                lang = lang_region.split("_")[0]
+                url_base = f"https://huggingface.co/rhasspy/piper-voices/resolve/main/{lang}/{lang_region}/{speaker}/{quality}/"
+                onnx_name = f"{base_voice}.onnx"
+                json_name = f"{base_voice}.onnx.json"
+
+                onnx_path = out_dir / onnx_name
+                json_path = out_dir / json_name
+
+                if not onnx_path.exists():
+                    console.print(f"[cyan]📥 Downloading baseline Piper ONNX voice ({base_voice})...[/cyan]")
+                    urllib.request.urlretrieve(url_base + onnx_name, onnx_path)
+                if not json_path.exists():
+                    urllib.request.urlretrieve(url_base + json_name, json_path)
+                console.print(f"[green]✓ Baseline Piper ONNX voice model ready at: {onnx_path}[/green]")
+        except Exception as e:
+            console.print(f"[yellow]Notice: Could not auto-download base Piper voice ({e}). Custom ONNX model can be placed in {out_dir}.[/yellow]")

@@ -22,6 +22,7 @@ from .pipeline_runner import run_scan_job, run_pipeline_job
 from ..waveform import generate_macro_waveform_from_manifest, extract_peaks_from_wav, generate_macro_waveform_for_media
 from ..script_parser import ScriptParser
 from ..model_trainer import ModelTrainer
+from ..dataset_builder import DatasetBuilder
 
 logger = logging.getLogger("voicesolate.api")
 
@@ -510,15 +511,51 @@ def train_model(req: TrainModelRequest, background_tasks: BackgroundTasks):
                 "f5tts": cdir / "datasets" / "f5tts"
             }
             eng_norm = eng.lower().replace("-", "").replace("_", "")
+            complete_msg = f"✓ {eng.upper()} voice model prepared successfully for {cdir.name}!"
+
             if "piper" in eng_norm or "onnx" in eng_norm:
-                job_manager.update_job(job_id, progress=30.0, stage="train", message="Configuring Piper VITS & LJSpeech dataset...")
+                if not (cdir / "datasets" / "piper" / "metadata.csv").exists():
+                    job_manager.update_job(job_id, progress=20.0, stage="dataset", message="Building LJSpeech dataset clips for Piper...")
+                    manifest_file = cdir.parent / "manifest.json"
+                    if manifest_file.exists():
+                        with open(manifest_file, "r", encoding="utf-8") as mf:
+                            mdata = json.load(mf)
+                        clips = [c for c in mdata.get("clips", []) if c.get("character", "").upper() == cdir.name.upper()]
+                        if clips:
+                            DatasetBuilder(cdir).build_piper_ljspeech(clips)
+                job_manager.update_job(job_id, progress=40.0, stage="train", message="Configuring Piper VITS & LJSpeech dataset...")
                 res = trainer.train_piper(datasets["piper"])
+                has_piper_train = shutil.which("piper_train") is not None
+                if has_piper_train:
+                    complete_msg = f"✓ Piper VITS voice model compiled successfully for {cdir.name}!"
+                else:
+                    complete_msg = f"✓ LJSpeech dataset packaged for {cdir.name} & baseline ONNX model ready for Step 4!"
             elif "xtts" in eng_norm:
-                job_manager.update_job(job_id, progress=30.0, stage="train", message="Computing Coqui XTTS-v2 speaker conditioning latents...")
+                if not (cdir / "datasets" / "xtts" / "reference_audio").exists():
+                    job_manager.update_job(job_id, progress=20.0, stage="dataset", message="Building reference clips for XTTS...")
+                    manifest_file = cdir.parent / "manifest.json"
+                    if manifest_file.exists():
+                        with open(manifest_file, "r", encoding="utf-8") as mf:
+                            mdata = json.load(mf)
+                        clips = [c for c in mdata.get("clips", []) if c.get("character", "").upper() == cdir.name.upper()]
+                        if clips:
+                            DatasetBuilder(cdir).build_xtts_dataset(clips)
+                job_manager.update_job(job_id, progress=40.0, stage="train", message="Computing Coqui XTTS-v2 speaker conditioning latents...")
                 res = trainer.train_xtts(datasets["xtts"])
+                complete_msg = f"✓ Coqui XTTS-v2 speaker profile ready for {cdir.name}!"
             elif "f5" in eng_norm:
-                job_manager.update_job(job_id, progress=30.0, stage="train", message="Configuring F5-TTS reference prompt pack & DiT profile...")
+                if not (cdir / "datasets" / "f5tts" / "ref_audio" / "ref.wav").exists():
+                    job_manager.update_job(job_id, progress=20.0, stage="dataset", message="Building reference audio for F5-TTS...")
+                    manifest_file = cdir.parent / "manifest.json"
+                    if manifest_file.exists():
+                        with open(manifest_file, "r", encoding="utf-8") as mf:
+                            mdata = json.load(mf)
+                        clips = [c for c in mdata.get("clips", []) if c.get("character", "").upper() == cdir.name.upper()]
+                        if clips:
+                            DatasetBuilder(cdir).build_f5tts_dataset(clips)
+                job_manager.update_job(job_id, progress=40.0, stage="train", message="Configuring F5-TTS reference prompt pack & DiT profile...")
                 res = trainer.train_f5tts(datasets["f5tts"])
+                complete_msg = f"✓ F5-TTS reference prompt pack configured for {cdir.name}!"
             else:
                 raise ValueError(f"Unknown engine: {eng}")
 
@@ -527,7 +564,7 @@ def train_model(req: TrainModelRequest, background_tasks: BackgroundTasks):
                 progress=100.0,
                 stage="complete",
                 status="completed",
-                message=f"✓ {eng.upper()} voice model prepared successfully for {cdir.name}!",
+                message=complete_msg,
                 result={"model_dir": str(res)} if res else {}
             )
         except Exception as e:

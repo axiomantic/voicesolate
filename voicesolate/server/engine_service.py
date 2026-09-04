@@ -12,6 +12,7 @@ import torch
 import warnings
 import urllib.parse
 import logging
+import wave
 
 logger = logging.getLogger("voicesolate.engine_service")
 
@@ -368,8 +369,8 @@ class EngineService:
                 )
                 self._loaded_piper_model_path = str(onnx_path)
 
-            with sf.SoundFile(str(out_wav), mode='w', samplerate=22050, channels=1, subtype='PCM_16') as wav_f:
-                self._piper_voice.synthesize(text.strip(), wav_f)
+            with wave.open(str(out_wav), "wb") as wav_f:
+                self._piper_voice.synthesize_wav(text.strip(), wav_f)
 
         else:
             raise ValueError(f"Unknown engine: {engine_id}")
