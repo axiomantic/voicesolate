@@ -56,13 +56,13 @@ def parse_args():
     parser.add_argument("--min-duration", type=float, default=5.0, help="Minimum clip duration in seconds (default: 5.0 to discard short utterances <= 5s, pass 0 to keep all)")
     parser.add_argument("--targets", nargs="+", default=["all"], help="Target model formats to prepare & train: 'all', 'piper', 'xtts', 'f5' (default: all)")
     parser.add_argument("--no-train", action="store_true", help="Prepare datasets only; skip model training / packaging")
-    parser.add_argument("--no-web-ui", action="store_true", help="Do not launch Voice Studio Web UI at the end")
-    parser.add_argument("--web", action="store_true", help="Immediately launch Voice Studio Web UI")
+    parser.add_argument("--web", action="store_true", help="Launch Voice Studio Web UI immediately (default when no --input is specified)")
+    parser.add_argument("--no-web-ui", "--headless", dest="no_web_ui", action="store_true", help="Batch CLI mode: do not launch Web Studio when processing finishes")
+    parser.add_argument("--no-browser", action="store_true", help="Do not automatically open default browser window")
     parser.add_argument("--host", default="127.0.0.1", help="Studio Web UI host (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=7860, help="Studio Web UI port (default: 7860)")
     parser.add_argument("--no-interactive", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--no-enhance", action="store_true", help="Skip ML vocal isolation and super-resolution enhancement")
-    parser.add_argument("--theme", default="ocean", choices=["ocean", "soft", "monochrome", "citrus", "glass", "default"], help="Gradio UI theme / skin (default: ocean)")
     parser.add_argument("--no-aggregate", action="store_true", help="Do not aggregate clips from other episodes in output directory for training datasets (default: aggregates all available clips for character)")
 
     # Granular Cache Bypass Controls (Additive & Re-entrant)
@@ -102,7 +102,7 @@ def main():
 
     # If no input provided or --web requested, launch studio immediately (<1s)
     if args.web or not args.input:
-        start_studio_server(host=args.host, port=args.port, open_browser=True)
+        start_studio_server(host=args.host, port=args.port, open_browser=not args.no_browser)
         return
 
     input_str = args.input.strip()
@@ -389,7 +389,7 @@ def main():
 
                 # Launch Modern Voice Studio Web UI or output rich non-interactive summary
                 if not (args.no_web_ui or args.no_interactive):
-                    start_studio_server(host=args.host, port=args.port, open_browser=True)
+                    start_studio_server(host=args.host, port=args.port, open_browser=not args.no_browser)
                 else:
                     from rich.table import Table
                     table = Table(title=f"🎙️ Voicesolate Model Architecture Summary — {char_name}", border_style="cyan")
