@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { WaveformRadar } from "./radar.js";
+import { WaveformRadar } from "./radar.js?v=2.4";
 
 class VoicesolateWizardApp {
   constructor() {
@@ -502,35 +502,12 @@ class VoicesolateWizardApp {
           this.selectedClip = null;
 
           if (this.radar) {
-            this.radar.clips = [];
-            this.radar.activeClip = null;
-            this.radar.hoverClip = null;
-            this.radar.workers = {};
-            this.radar.draw();
+            this.radar.clear("Audio cache cleared. Ready to search.");
           }
           this.waveformData = null;
 
-          if (this.mediaPath) {
-            const ep = this.episodeName || (this.episodeCode ? `Episode_${this.episodeCode}` : "Current_Media");
-            try {
-              const wf = await api.getWaveform(ep, this.mediaPath);
-              if (wf) {
-                wf.clips = []; // Ensure clips are always empty after cache clear
-                this.waveformData = wf;
-                if (this.radar) {
-                  this.radar.setData(wf);
-                  this.radar.clips = [];
-                  this.radar.draw();
-                }
-                if (wf.duration) {
-                  const durEl = document.getElementById("radarDurationText");
-                  if (durEl) durEl.innerText = this.formatTime(wf.duration);
-                }
-              }
-            } catch (wfErr) {
-              console.warn("Waveform refresh after clear:", wfErr);
-            }
-          }
+          const durEl = document.getElementById("radarDurationText");
+          if (durEl) durEl.innerText = "0:00";
 
           const startBtn = document.getElementById("startSearchBtn");
           if (startBtn) startBtn.disabled = false;

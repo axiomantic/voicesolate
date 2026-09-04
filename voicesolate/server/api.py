@@ -599,22 +599,15 @@ def clear_step(req: ClearStepRequest):
                                 manifest_file.unlink(missing_ok=True)
                                 cleared.append(str(manifest_file))
 
-        # Reset clips in cached waveform JSON files
+        # Delete cached waveform JSON files
         cache_wf = Path("cache/waveforms").resolve()
         if cache_wf.exists():
             clean_needle = re.sub(r"[^a-zA-Z0-9]", "", (req.episode_name or "").lower())[:15]
             for f in cache_wf.glob("*.json"):
                 clean_f = re.sub(r"[^a-zA-Z0-9]", "", f.name.lower())
                 if not clean_needle or clean_needle in clean_f:
-                    try:
-                        with open(f, "r", encoding="utf-8") as wf_f:
-                            wf_d = json.load(wf_f)
-                        wf_d["clips"] = []
-                        with open(f, "w", encoding="utf-8") as wf_f:
-                            json.dump(wf_d, wf_f)
-                        cleared.append(str(f))
-                    except Exception:
-                        pass
+                    f.unlink(missing_ok=True)
+                    cleared.append(str(f))
 
         # Clear STT cache files matching episode or character
         cache_stt = Path("cache/stt").resolve()

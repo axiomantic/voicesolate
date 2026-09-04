@@ -57,6 +57,19 @@ export class WaveformRadar {
     this.draw();
   }
 
+  clear(emptyMessage = "Audio cache cleared. Ready to search.") {
+    this.isLoading = false;
+    this.duration = 0;
+    this.peaks = [];
+    this.rms = [];
+    this.clips = [];
+    this.workers = {};
+    this.activeClip = null;
+    this.hoverClip = null;
+    this.emptyMessage = emptyMessage;
+    this.draw();
+  }
+
   updateWorker(workerData) {
     if (!workerData || !workerData.worker_id) return;
     this.workers[workerData.worker_id] = workerData;
@@ -280,7 +293,7 @@ export class WaveformRadar {
       ctx.fillStyle = "#475569";
       ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText("Awaiting media selection to probe timeline...", w / 2, midY - 10);
+      ctx.fillText(this.emptyMessage || "Ready to search. Timeline unprobed.", w / 2, midY - 10);
       ctx.textAlign = "start";
     }
 
