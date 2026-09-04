@@ -68,7 +68,9 @@ voicesolate -i "path/to/movie.mkv"
 | `-s, --script` | Script path (`.txt`, `.json`, `.srt`), or web URL | Auto-detected from video subtitles |
 | `--provider` | Optional script provider (e.g. `startrek`) | `None` |
 | `-o, --output-dir` | Directory where audio clips and manifest are saved | `./output` |
+| `--targets` | TTS targets to prepare & train: `all`, `piper`, `xtts`, `f5` | `all` |
 | `--min-duration` | Discard audio clips shorter than N seconds (pass `0` to keep all) | `5.0` (discards <= 5s) |
+| `--no-train` | Prepare training-ready datasets only (skip tuning) | `False` |
 | `--no-enhance` | Skip neural Demucs isolation (export discrete raw slices) | `False` |
 | `--wyoming-host` | Optional Wyoming Whisper STT IP | `10.0.2.141` |
 | `--wyoming-port` | Optional Wyoming Whisper STT Port | `10300` |
@@ -77,17 +79,31 @@ voicesolate -i "path/to/movie.mkv"
 
 ## 📁 Output Structure
 
-Extracted audio and metadata are stored in:
+Voicesolate automatically produces an end-to-end training and inference layout:
 ```text
 output/<media_name>/
 ├── manifest.json
 └── <CHARACTER>/
-    ├── raw/
-    │   ├── 00_00_35_915-00_00_36_855.wav          # Raw discrete dialogue slice
-    │   └── ...
-    └── enhanced/
-        ├── 00_00_35_915-00_00_36_855_enhanced.wav # Clean neural vocal master
-        └── ...
+    ├── raw/                                        # Discrete dialogue slices
+    │   └── 00_00_35_915-00_00_36_855.wav
+    ├── enhanced/                                   # Clean neural vocal masters
+    │   └── 00_00_35_915-00_00_36_855_enhanced.wav
+    ├── datasets/
+    │   ├── piper/                                  # 22.05kHz mono LJSpeech dataset
+    │   │   ├── metadata.csv
+    │   │   └── wavs/
+    │   ├── xtts/                                   # 24kHz Coqui XTTS & Chatterbox format
+    │   │   ├── metadata.csv
+    │   │   ├── reference_audio/
+    │   │   └── wavs/
+    │   └── f5tts/                                  # 24kHz F5-TTS DiT diffusion format
+    │       ├── metadata.csv
+    │       ├── ref_audio/ (ref.wav & ref.txt)
+    │       └── wavs/
+    └── models/                                     # Output voice models & configs
+        ├── piper/                                  # Piper VITS model & voice.json
+        ├── xtts/                                   # XTTS speaker profile & latents
+        └── f5tts/                                  # F5-TTS reference prompt pack & DiT weights
 ```
 
-`manifest.json` provides dataset-ready metadata with script dialogue, exact timecodes, and transcription confidence scores.
+`manifest.json` provides comprehensive episode-level metadata with script dialogue, exact timecodes, and transcription confidence scores.

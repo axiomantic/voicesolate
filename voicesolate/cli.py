@@ -16,12 +16,14 @@ from .audio_extractor import AudioExtractor
 from .search_aligner import SearchAligner
 from .audio_enhancer import AudioEnhancer
 from .cache_manager import CacheManager
+from .dataset_builder import DatasetBuilder
+from .model_trainer import ModelTrainer
 
 console = Console()
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Extract and enhance character voice audio from video/audio files using Wyoming STT and ML models."
+        description="Extract, enhance, format datasets, and train/tune TTS voice models (Piper, XTTS, F5-TTS)."
     )
     parser.add_argument("-i", "--input", required=True, help="Path to input video or audio file (e.g. episode.mkv)")
     parser.add_argument("-s", "--script", default=None, help="Script path (.txt, .json, .srt), URL, or episode ID")
@@ -31,6 +33,8 @@ def parse_args():
     parser.add_argument("--wyoming-host", default="10.0.2.141", help="Wyoming STT server IP/hostname (default: 10.0.2.141)")
     parser.add_argument("--wyoming-port", type=int, default=10300, help="Wyoming STT server port (default: 10300)")
     parser.add_argument("--min-duration", type=float, default=5.0, help="Minimum clip duration in seconds (default: 5.0 to discard short utterances <= 5s, pass 0 to keep all)")
+    parser.add_argument("--targets", nargs="+", default=["all"], help="Target model formats to prepare & train: 'all', 'piper', 'xtts', 'f5' (default: all)")
+    parser.add_argument("--no-train", action="store_true", help="Prepare datasets only; skip model training / packaging")
     parser.add_argument("--no-enhance", action="store_true", help="Skip ML vocal isolation and super-resolution enhancement")
     parser.add_argument("--all-characters", action="store_true", help="Select all characters found in script")
     return parser.parse_args()
@@ -217,10 +221,41 @@ def main():
     with open(manifest_file, "w") as f:
         json.dump(manifest, f, indent=2)
 
-    console.print(f"\n[bold green]✓ Voice extraction complete![/bold green]")
+    console.print(f"\n[bold green]✓ Voice extraction & isolation complete![/bold green]")
     console.print(f"[cyan]Total clips extracted:[/cyan] {len(manifest['clips'])}")
     console.print(f"[cyan]Output folder:[/cyan] {output_base_dir}")
-    console.print(f"[cyan]Manifest file:[/cyan] {manifest_file}")
+    console.print(f"[cyan]Manifest file:[/cyan] {manifest_file}\n")
+
+    # Automated Dataset Generation & Model Packaging / Training
+    if manifest["clips"]:
+        console.print(Panel.fit(
+            "[bold green]🧠 Dataset Preparation & Model Packaging (Piper • XTTS • F5-TTS)[/bold green]\n"
+            f"[yellow]Targets:[/yellow] {', '.join(args.targets)}\n"
+            f"[yellow]Action:[/yellow] {'Dataset Preparation Only (--no-train)' if args.no_train else 'Prepare Datasets & Configure/Tune Models'}",
+            border_style="green"
+        ))
+
+        # Group clips by character
+        clips_by_char = {}
+        for c in manifest["clips"]:
+            clips_by_char.setdefault(c["character"], []).append(c)
+
+        for char_name, char_clips in clips_by_char.items():
+            char_dir = output_base_dir / char_name
+            builder = DatasetBuilder(char_dir)
+
+            console.print(f"\n[bold cyan]── Building datasets for character: {char_name} ({len(char_clips)} clips) ──[/bold cyan]")
+            datasets = builder.build_all(char_clips, targets=args.targets)
+
+            for target_name, path in datasets.items():
+                console.print(f"[green]✓ {target_name.upper()} dataset ready:[/green] {path}")
+
+            if not args.no_train:
+                trainer = ModelTrainer(char_dir)
+                console.print(f"\n[bold magenta]── Configuring & Tuning models for: {char_name} ──[/bold magenta]")
+                trained_models = trainer.train_all(datasets, targets=args.targets)
+                for model_type, model_path in trained_models.items():
+                    console.print(f"[bold green]✓ {model_type.upper()} model package created:[/bold green] {model_path}")
 
 if __name__ == "__main__":
     main()

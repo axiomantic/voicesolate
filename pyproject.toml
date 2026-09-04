@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "voicesolate"
-version = "0.2.0"
+version = "0.3.0"
 description = "Automated Character Dialogue Extraction & Neural Studio Audio Isolation Pipeline"
 readme = "README.md"
 requires-python = ">=3.10"
