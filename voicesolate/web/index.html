@@ -45,24 +45,39 @@
     </div>
   </header>
 
-  <!-- Sequential Pipeline Stage Tabs -->
-  <nav class="tabs-nav">
-    <button class="tab-btn active" data-tab="tab-ingestion">
-      <span>🛰️</span>
-      <span>1. Media Ingestion &amp; Discovery</span>
-    </button>
-    <button class="tab-btn" data-tab="tab-radar">
-      <span>🌊</span>
-      <span>2. Divide-and-Conquer Audio Radar</span>
-    </button>
-    <button class="tab-btn" data-tab="tab-engines">
-      <span>🧬</span>
-      <span>3. Datasets &amp; Voice Engines</span>
-    </button>
-    <button class="tab-btn" data-tab="tab-studio">
-      <span>🎙️</span>
-      <span>4. Voice Synthesis Studio</span>
-    </button>
+  <!-- Sequential Wizard Stepper Bar -->
+  <nav class="wizard-stepper">
+    <div class="wizard-step active" data-step="1" id="stepperStep1">
+      <div class="step-badge">1</div>
+      <div class="step-info">
+        <span class="step-title">🛰️ Choose Files</span>
+        <span class="step-status" id="step1Status">Active</span>
+      </div>
+    </div>
+    <div class="stepper-arrow">➔</div>
+    <div class="wizard-step locked" data-step="2" id="stepperStep2">
+      <div class="step-badge">2</div>
+      <div class="step-info">
+        <span class="step-title">🌊 Find Audio</span>
+        <span class="step-status" id="step2Status">Locked</span>
+      </div>
+    </div>
+    <div class="stepper-arrow">➔</div>
+    <div class="wizard-step locked" data-step="3" id="stepperStep3">
+      <div class="step-badge">3</div>
+      <div class="step-info">
+        <span class="step-title">🧬 Model Training</span>
+        <span class="step-status" id="step3Status">Locked</span>
+      </div>
+    </div>
+    <div class="stepper-arrow">➔</div>
+    <div class="wizard-step locked" data-step="4" id="stepperStep4">
+      <div class="step-badge">4</div>
+      <div class="step-info">
+        <span class="step-title">🎙️ Voice Synthesis</span>
+        <span class="step-status" id="step4Status">Locked</span>
+      </div>
+    </div>
   </nav>
 
   <!-- Active Job Progress Banner -->
@@ -84,23 +99,27 @@
     </div>
   </div>
 
-  <!-- Main Pipeline Content Panes -->
+  <!-- Main Wizard Content Panes -->
   <main class="main-content">
 
-    <!-- STAGE 1: MEDIA INGESTION & SCRIPT DISCOVERY -->
-    <section id="tab-ingestion" class="tab-pane active">
+    <!-- STEP 1: CHOOSE FILES & SCRIPT DISCOVERY -->
+    <section id="step-pane-1" class="tab-pane active">
       <div class="card">
         <div class="card-header">
           <div>
-            <h2 class="card-title">🛰️ Media Ingestion &amp; Dialogue Mining</h2>
-            <p class="card-subtitle">Zero-download remote SFTP/SSH chunk seeking or local file ingestion</p>
+            <h2 class="card-title">🛰️ Step 1: Media Ingestion &amp; Script Discovery</h2>
+            <p class="card-subtitle">Choose media file or remote SFTP URL, auto-detect episode, load screenplay or subtitles, and pick your target character.</p>
           </div>
+          <button class="btn btn-secondary btn-sm" id="resetStep1Btn" title="Reset all Step 1 inputs">
+            <span>🗑️</span>
+            <span>Reset Step 1</span>
+          </button>
         </div>
 
         <div style="display:flex; flex-direction:column; gap:20px;">
           <!-- Quick Preset Chips -->
           <div>
-            <label class="form-label">Recent / Preset Media Sources:</label>
+            <label class="form-label">Quick Presets / Recent Sources:</label>
             <div class="preset-chips-row">
               <button type="button" class="preset-chip" data-path="sftp://elijah@flanopticon.lan/mnt/nas/media/downloads/complete/TV Shows/www.UIndex.org    -    Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune/Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune.mkv" data-script="s06e01" data-char="CLEMENS">
                 ⚡ Remote S06E01 Times Arrow Part 2 (flanopticon.lan)
@@ -109,181 +128,287 @@
                 ⚡ Remote S05E26 Times Arrow Part 1 (flanopticon.lan)
               </button>
               <button type="button" class="preset-chip" data-path="./output/Star_Trek_The_Next_Generation_S06E01_Times_Arrow_Part_2_1080/CLEMENS/raw" data-script="s06e01" data-char="CLEMENS">
-                📂 Local Discovered Files
+                📂 Local Sample Clips
               </button>
             </div>
           </div>
 
-          <!-- Media Path Inputs -->
+          <!-- Media Path Input -->
           <div class="form-group">
-            <label class="form-label" for="pipelineInputPath">Media File Path or Remote SFTP URL</label>
-            <input type="text" id="pipelineInputPath" class="form-input" style="font-family:var(--font-mono); font-size:13px;" placeholder="sftp://user@host/path/to/video.mkv  or  /path/to/local_video.mkv" value="sftp://elijah@flanopticon.lan/mnt/nas/media/downloads/complete/TV Shows/www.UIndex.org    -    Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune/Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune.mkv">
+            <label class="form-label" for="wizardInputPath">Media File Path or Remote SFTP URL <span style="color:var(--accent-rose);">*</span></label>
+            <input type="text" id="wizardInputPath" class="form-input" style="font-family:var(--font-mono); font-size:13px;" placeholder="sftp://user@host/path/to/video.mkv  or  /path/to/local_video.mkv">
           </div>
 
+          <!-- Episode Auto-Detection Row -->
           <div class="form-grid">
             <div class="form-group">
-              <label class="form-label" for="pipelineScriptPath">Script Identifier or Subtitle Path</label>
-              <input type="text" id="pipelineScriptPath" class="form-input" placeholder="e.g. s06e01 or local script file" value="s06e01">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label class="form-label" for="wizardEpisodeInput">Detected Episode Code <span style="color:var(--accent-rose);">*</span></label>
+                <span id="wizardEpisodeBadge" class="badge" style="display:none; background:rgba(6, 182, 212, 0.15); color:var(--accent-cyan); font-family:var(--font-mono);"></span>
+              </div>
+              <input type="text" id="wizardEpisodeInput" class="form-input" placeholder="e.g. s06e01 (Auto-extracted from filename)">
             </div>
 
             <div class="form-group">
-              <label class="form-label" for="pipelineProviderSelect">Script Provider</label>
-              <select id="pipelineProviderSelect" class="form-select">
-                <option value="startrek">Star Trek Script Archive (Automatic)</option>
-                <option value="generic">Generic SRT / Subtitle Only</option>
+              <label class="form-label" for="wizardProviderSelect">Script Source Type</label>
+              <select id="wizardProviderSelect" class="form-select">
+                <option value="startrek">Star Trek Script Archive (Auto-Archive Search)</option>
+                <option value="upload">Custom Subtitle / Screenplay Upload</option>
               </select>
             </div>
-
-            <div class="form-group">
-              <label class="form-label" for="pipelineCharInput">Target Character</label>
-              <input type="text" id="pipelineCharInput" class="form-input" placeholder="e.g. CLEMENS, PICARD, DATA" value="CLEMENS">
-            </div>
           </div>
 
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div style="display:flex; gap:14px;">
-              <button class="btn btn-secondary" id="pipelineScanBtn">
+          <!-- Script Ingestion Area -->
+          <div id="archiveSearchSection" style="display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; gap:12px; align-items:center;">
+              <button class="btn btn-secondary" id="wizardFetchScriptBtn" style="padding:10px 18px;">
                 <span>🔍</span>
-                <span>Scan &amp; Discover Characters</span>
+                <span>Search &amp; Load Script from Archive</span>
               </button>
-              <button class="btn btn-primary" id="pipelineExtractBtn">
-                <span>⚡</span>
-                <span>Run Full Extraction &amp; Neural Isolation</span>
-              </button>
+              <span id="wizardScriptStatusText" style="font-size:12px; color:var(--text-dim); font-family:var(--font-mono);"></span>
             </div>
-            <span id="pipelineScanStatusText" style="font-size:12px; color:var(--text-dim); font-family:var(--font-mono);"></span>
           </div>
 
-          <!-- Discovered Character Dialogue Table -->
-          <div id="pipelineDiscoveredContainer" style="display:none; flex-direction:column; gap:12px; margin-top:8px;">
-            <h4 style="font-size:13px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">
-              Discovered Speaking Characters in Media
-            </h4>
-            <div style="max-height: 320px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 8px;">
-              <table class="data-table" id="pipelineCharactersTable">
+          <!-- Custom Script Upload Dropzone -->
+          <div id="customUploadSection" style="display:none; flex-direction:column; gap:10px;">
+            <div class="upload-dropzone" id="scriptDropzone">
+              <span style="font-size:28px;">📄</span>
+              <div style="font-weight:600; color:#fff;">Drag &amp; Drop Subtitle or Script file here</div>
+              <div style="font-size:12px; color:var(--text-dim);">Supports .srt, .txt, or .json dialogue files</div>
+              <input type="file" id="scriptFileInput" accept=".srt,.txt,.json" style="display:none;">
+              <button type="button" class="btn btn-secondary btn-sm" id="browseScriptBtn" style="margin-top:6px;">Browse Files...</button>
+            </div>
+          </div>
+
+          <!-- Character Selector (Revealed after script is loaded) -->
+          <div id="wizardCharacterContainer" style="display:none; flex-direction:column; gap:12px; background:var(--bg-surface-elevated); border:1px solid var(--border-subtle); border-radius:10px; padding:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <label class="form-label" for="wizardCharacterSelect" style="margin:0; font-size:14px; font-weight:600; color:#fff;">
+                Select Speaking Character to Train <span style="color:var(--accent-rose);">*</span>
+              </label>
+              <span id="wizardCharStatsBadge" class="badge badge-ready"></span>
+            </div>
+            <select id="wizardCharacterSelect" class="form-select" style="font-size:14px; padding:10px;">
+              <option value="">-- Choose Character --</option>
+            </select>
+
+            <!-- Discovered Character Dialogue Roster Preview -->
+            <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 8px; margin-top:8px;">
+              <table class="data-table" id="wizardCharactersTable">
                 <thead>
                   <tr>
                     <th>Character</th>
                     <th>Dialogue Lines</th>
-                    <th>Est. Speaking Duration</th>
+                    <th>Est. Speaking Time</th>
                     <th>Action</th>
                   </tr>
                 </thead>
-                <tbody id="pipelineCharactersTbody">
-                </tbody>
+                <tbody id="wizardCharactersTbody"></tbody>
               </table>
             </div>
           </div>
+
+          <!-- Wizard Gating Checklist & Next Button -->
+          <div class="wizard-footer-bar">
+            <div class="checklist-box">
+              <div class="checklist-item" id="chkMedia"><span>⚪</span> Media Path Chosen</div>
+              <div class="checklist-item" id="chkEpisode"><span>⚪</span> Episode Detected</div>
+              <div class="checklist-item" id="chkScript"><span>⚪</span> Script Loaded</div>
+              <div class="checklist-item" id="chkChar"><span>⚪</span> Character Selected</div>
+            </div>
+
+            <button class="btn btn-primary" id="step1NextBtn" disabled style="padding:12px 24px; font-size:14px; font-weight:600;">
+              <span>Next: Find Audio (Radar) ➔</span>
+            </button>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- STAGE 2: DIVIDE-AND-CONQUER AUDIO RADAR -->
-    <section id="tab-radar" class="tab-pane">
+    <!-- STEP 2: FIND AUDIO (DIVIDE-AND-CONQUER RADAR & WORKERS) -->
+    <section id="step-pane-2" class="tab-pane">
       <div class="card">
         <div class="card-header">
           <div>
-            <h2 class="card-title">🌊 Divide-and-Conquer Audio Radar</h2>
-            <p class="card-subtitle">Macro-representation of entire media file, parallel STT search sweeps &amp; dialogue bounds</p>
+            <h2 class="card-title">🌊 Step 2: Divide-and-Conquer Audio Radar &amp; Neural Isolation</h2>
+            <p class="card-subtitle">Sample media timeline, execute parallel STT search sweeps, and isolate clean neural voice stems.</p>
           </div>
-          <div style="display:flex; align-items:center; gap:16px;">
-            <span style="font-family:var(--font-mono); font-size:13px; color:var(--accent-cyan);" id="radarCursorTime">0:00.00</span>
-            <span style="font-size:13px; color:var(--text-muted);" id="radarDurationText">0:00</span>
-            <span class="badge badge-ready" id="radarClipsCount">0 clips</span>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button class="btn btn-secondary btn-sm" id="step2BackBtn">⬅️ Back to Step 1</button>
+            <button class="btn btn-danger btn-sm" id="clearStep2Btn" title="Clear extracted clips and STT cache">🗑️ Clear Audio Cache</button>
           </div>
         </div>
 
-        <div class="radar-container">
-          <div class="canvas-wrapper">
-            <canvas id="macroWaveformCanvas"></canvas>
-          </div>
-
-          <!-- Active Search Workers Grid -->
-          <div>
-            <h4 style="font-size:13px; color:var(--text-muted); margin-bottom:10px; text-transform:uppercase; letter-spacing:0.5px;">
-              Active Search Workers &amp; Segment Hunters
-            </h4>
-            <div class="radar-workers-grid" id="radarWorkersContainer">
-              <div class="worker-card">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                  <span style="font-weight:600;">worker-stt-1</span>
-                  <span class="worker-badge matched">Standby</span>
-                </div>
-                <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);">Whisper Word-Timestamp Radar</div>
-                <div style="font-size:12px; color:var(--text-muted);">Indexed and ready for alignment sweeps.</div>
-              </div>
+        <div style="display:flex; flex-direction:column; gap:20px;">
+          <!-- Waveform Header & Controls -->
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; align-items:center; gap:14px;">
+              <button class="btn btn-primary" id="startSearchBtn">
+                <span>⚡</span>
+                <span>Start Parallel Search &amp; Neural Isolation</span>
+              </button>
+              <span id="step2ExtractionStatusText" style="font-size:13px; color:var(--text-dim); font-family:var(--font-mono);">Ready to search</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:16px;">
+              <span style="font-family:var(--font-mono); font-size:13px; color:var(--accent-cyan);" id="radarCursorTime">0:00.00</span>
+              <span style="font-size:13px; color:var(--text-muted);" id="radarDurationText">0:00</span>
+              <span class="badge badge-ready" id="radarClipsCount">0 clips</span>
             </div>
           </div>
 
-          <!-- Clip Inspector Panel (opens when clip on radar clicked) -->
-          <div class="clip-inspector" id="clipInspectorPanel" style="display:none;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
+          <!-- Waveform Loading State Banner -->
+          <div id="waveformLoadingBanner" style="display:none; padding:18px; border-radius:8px; background:rgba(6, 182, 212, 0.08); border:1px dashed var(--accent-cyan); text-align:center; color:var(--accent-cyan); font-weight:500;">
+            ⏳ Sampling Media &amp; Generating Timeline Waveform (Seeking discrete center-channel audio)...
+          </div>
+
+          <!-- Waveform Canvas -->
+          <div class="radar-container">
+            <div class="canvas-wrapper">
+              <canvas id="macroWaveformCanvas"></canvas>
+            </div>
+
+            <!-- Dual-Stage Worker & Queue Dashboard -->
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+              <!-- Stage A: Search / STT Workers -->
               <div>
-                <h3 style="font-size:16px; color:#fff;" id="inspectorCharName">CLEMENS</h3>
-                <span style="font-size:12px; color:var(--text-dim); font-family:var(--font-mono);" id="inspectorTimecode"></span>
+                <h4 style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">
+                  Stage A: Divide-and-Conquer STT Search Workers
+                </h4>
+                <div class="radar-workers" id="radarWorkersContainer">
+                  <div class="worker-card">
+                    <div style="display:flex; justify-content:space-between;">
+                      <span style="font-weight:600;">worker-stt-1</span>
+                      <span class="worker-badge idle">idle</span>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted);">Awaiting extraction start...</div>
+                  </div>
+                </div>
               </div>
-              <span class="badge badge-ready" id="inspectorConfidenceBadge">98% Match</span>
+
+              <!-- Stage B: Neural Enhancement Workers (Demucs v4) -->
+              <div>
+                <h4 style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">
+                  Stage B: Neural Isolation (Demucs v4) Queue
+                </h4>
+                <div class="radar-workers" id="enhancementWorkersContainer">
+                  <div class="worker-card" id="demucsWorkerCard">
+                    <div style="display:flex; justify-content:space-between;">
+                      <span style="font-weight:600;">worker-demucs-1</span>
+                      <span class="worker-badge idle" id="demucsBadge">idle</span>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted);" id="demucsSnippet">Queue empty</div>
+                    <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);" id="demucsQueueCount">0 clips pending</div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <p style="font-size:14px; color:var(--text-main); font-style:italic;" id="inspectorText"></p>
-
-            <div class="audition-grid">
-              <div class="audio-player-card">
-                <span style="font-size:12px; font-weight:600; color:var(--accent-indigo);">1. Raw Center Channel (FC Discrete Stem)</span>
-                <audio id="inspectorRawAudio" controls></audio>
+            <!-- Dual-Stem Clip Inspector -->
+            <div class="clip-inspector" id="clipInspectorContainer" style="display:none;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h4 style="font-size:13px; font-weight:600; color:#fff;" id="inspectorClipTitle">Clip Details</h4>
+                <span class="badge badge-ready" id="inspectorConfidence">100% confidence</span>
               </div>
-              <div class="audio-player-card" style="border-color:var(--accent-emerald);">
-                <span style="font-size:12px; font-weight:600; color:var(--accent-emerald);">2. Demucs v4 Neural Vocal Stem (Isolated)</span>
-                <audio id="inspectorEnhAudio" controls></audio>
+              <div style="font-size:13px; color:var(--text-muted); line-height:1.4;" id="inspectorClipText"></div>
+
+              <div class="dual-audio-grid">
+                <div class="audio-player-card">
+                  <span style="font-size:11px; color:var(--text-dim); text-transform:uppercase;">Raw Center Channel Stem</span>
+                  <audio id="inspectorRawAudio" controls></audio>
+                </div>
+                <div class="audio-player-card" style="border-color:var(--accent-cyan); background:rgba(6, 182, 212, 0.04);">
+                  <span style="font-size:11px; color:var(--accent-cyan); text-transform:uppercase;">Demucs v4 Neural Isolated Vocal</span>
+                  <audio id="inspectorEnhancedAudio" controls></audio>
+                </div>
               </div>
             </div>
+          </div>
+
+          <!-- Step 2 Gating Footer -->
+          <div class="wizard-footer-bar">
+            <span id="step2GatingStatus" style="font-size:13px; color:var(--text-muted);">
+              All script items must be found and isolated to proceed.
+            </span>
+            <button class="btn btn-primary" id="step2NextBtn" disabled style="padding:12px 24px; font-size:14px; font-weight:600;">
+              <span>Next: Model Training ➔</span>
+            </button>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- STAGE 3: DATASETS & ENGINES -->
-    <section id="tab-engines" class="tab-pane">
+    <!-- STEP 3: MODEL TRAINING (DATASETS & ENGINES) -->
+    <section id="step-pane-3" class="tab-pane">
       <div class="card">
         <div class="card-header">
           <div>
-            <h2 class="card-title">🧬 Character Dataset &amp; Engine Hub</h2>
-            <p class="card-subtitle" id="datasetStatsHeader">Corpus health and model readiness</p>
+            <h2 class="card-title">🧬 Step 3: Voice Model Training &amp; Packaging</h2>
+            <p class="card-subtitle" id="step3Subtitle">Configure zero-shot profiles, generate reference prompt packs, and compile neural voice checkpoints.</p>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button class="btn btn-secondary btn-sm" id="step3BackBtn">⬅️ Back to Step 2</button>
+            <button class="btn btn-danger btn-sm" id="clearStep3Btn" title="Clear datasets and compiled models">🗑️ Clear Models &amp; Datasets</button>
           </div>
         </div>
 
-        <div class="engines-grid" id="enginesGridContainer">
-          <!-- Populated dynamically by app.js -->
+        <div style="display:flex; flex-direction:column; gap:20px;">
+          <!-- Corpus Health Summary -->
+          <div style="display:flex; gap:16px; flex-wrap:wrap;">
+            <div class="status-pill">
+              <span>👤 Character:</span>
+              <strong id="trainingCharName" style="color:#fff;">None</strong>
+            </div>
+            <div class="status-pill">
+              <span>📦 Total Clips:</span>
+              <strong id="trainingClipsCount" style="color:#fff;">0</strong>
+            </div>
+            <div class="status-pill">
+              <span>⏱️ Total Corpus:</span>
+              <strong id="trainingDurationText" style="color:#fff;">0 min</strong>
+            </div>
+          </div>
+
+          <!-- 3 Dedicated Model Training Cards -->
+          <div class="engines-grid" id="enginesGridContainer">
+            <!-- Populated dynamically with F5-TTS, XTTS-v2, and Piper cards -->
+          </div>
+
+          <!-- Step 3 Gating Footer -->
+          <div class="wizard-footer-bar">
+            <span id="step3GatingStatus" style="font-size:13px; color:var(--text-muted);">
+              At least one model must be trained to proceed to synthesis.
+            </span>
+            <button class="btn btn-primary" id="step3NextBtn" disabled style="padding:12px 24px; font-size:14px; font-weight:600;">
+              <span>Next: Voice Synthesis Studio ➔</span>
+            </button>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- STAGE 4: VOICE SYNTHESIS STUDIO -->
-    <section id="tab-studio" class="tab-pane">
+    <!-- STEP 4: VOICE SYNTHESIS STUDIO -->
+    <section id="step-pane-4" class="tab-pane">
       <div class="card">
         <div class="card-header">
           <div>
-            <h2 class="card-title">🎙️ Creative Synthesis Studio</h2>
-            <p class="card-subtitle">Zero-shot neural flow-matching &amp; comparative reference auditioning</p>
+            <h2 class="card-title">🎙️ Step 4: Voice Synthesis Studio &amp; Multi-Model Audition</h2>
+            <p class="card-subtitle">Audition AI speech side-by-side against original ground-truth actor voice from the training dataset.</p>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button class="btn btn-secondary btn-sm" id="step4BackBtn">⬅️ Back to Step 3</button>
+            <button class="btn btn-danger btn-sm" id="clearStep4Btn" title="Clear synthesized audio cache">🗑️ Clear Synthesis Cache</button>
           </div>
         </div>
 
-        <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:24px;">
-          <!-- Left: Synthesis Controls -->
+        <div style="display:grid; grid-template-columns: 1.1fr 1.3fr; gap:24px;">
+          <!-- Left: Prompts, Parameters, and Engine Checkboxes -->
           <div style="display:flex; flex-direction:column; gap:18px;">
             <div class="form-group">
-              <label class="form-label" for="studioEngineSelect">Voice Synthesis Architecture</label>
-              <select id="studioEngineSelect" class="form-select">
-                <option value="f5-tts">F5-TTS (Diffusion Flow-Matching — 24kHz)</option>
-                <option value="xtts-v2">Coqui XTTS-v2 (Autoregressive Latents — 24kHz)</option>
-                <option value="piper">Piper VITS (Fast CPU Neural ONNX — 22.05kHz)</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="studioQuoteSelect">Sample Dialogue Preset</label>
+              <label class="form-label" for="studioQuoteSelect">
+                Quote Presets (From Training Dataset):
+              </label>
               <select id="studioQuoteSelect" class="form-select">
-                <option value="">-- Quick-select character quote --</option>
+                <option value="">-- Click to load quote &amp; original actor audio --</option>
               </select>
             </div>
 
@@ -295,7 +420,7 @@
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
               <div class="form-group">
                 <div style="display:flex; justify-content:space-between;">
-                  <label class="form-label" for="studioSpeedRange">Speech Cadence / Speed</label>
+                  <label class="form-label" for="studioSpeedRange">Cadence / Speed</label>
                   <span id="studioSpeedValue" style="font-size:12px; font-family:var(--font-mono); color:var(--accent-cyan);">1.00x</span>
                 </div>
                 <input type="range" id="studioSpeedRange" min="0.6" max="1.6" step="0.05" value="1.0" style="accent-color:var(--accent-cyan);">
@@ -307,34 +432,57 @@
               </div>
             </div>
 
-            <button class="btn btn-primary" id="studioSynthesizeBtn" style="padding:14px; font-size:15px; margin-top:8px;">
+            <!-- Model Selection Checkboxes -->
+            <div class="form-group">
+              <label class="form-label">Select Voice Models to Generate (Simultaneous Audition):</label>
+              <div class="engine-checkbox-row">
+                <label class="engine-checkbox-card" id="cardCheckF5">
+                  <input type="checkbox" id="checkEngineF5" value="f5-tts" checked>
+                  <div>
+                    <strong style="color:#fff; font-size:13px;">F5-TTS</strong>
+                    <div style="font-size:11px; color:var(--text-dim);">Diffusion (24kHz)</div>
+                  </div>
+                </label>
+
+                <label class="engine-checkbox-card" id="cardCheckXTTS">
+                  <input type="checkbox" id="checkEngineXTTS" value="xtts-v2" checked>
+                  <div>
+                    <strong style="color:#fff; font-size:13px;">Coqui XTTS-v2</strong>
+                    <div style="font-size:11px; color:var(--text-dim);">Autoregressive (24kHz)</div>
+                  </div>
+                </label>
+
+                <label class="engine-checkbox-card" id="cardCheckPiper">
+                  <input type="checkbox" id="checkEnginePiper" value="piper">
+                  <div>
+                    <strong style="color:#fff; font-size:13px;">Piper VITS</strong>
+                    <div style="font-size:11px; color:var(--text-dim);">Fast CPU (22.05kHz)</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <button class="btn btn-primary" id="studioSynthesizeBatchBtn" style="padding:14px; font-size:15px; font-weight:600;">
               <span>🎙️</span>
-              <span>Generate AI Voice</span>
+              <span>Synthesize Selected Models</span>
             </button>
           </div>
 
-          <!-- Right: Side-by-Side Comparator -->
+          <!-- Right: Multi-Model Comparison Audition Grid -->
           <div style="display:flex; flex-direction:column; gap:18px;">
             <!-- Reference Audio Card -->
-            <div class="audio-player-card">
+            <div class="audio-player-card" style="border-color:var(--border-strong); background:var(--bg-surface-elevated);">
               <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-weight:600; font-size:13px; color:#fff;">🎧 Actor Reference Voice (Original Neural Stem)</span>
-                <span id="studioRefLabel" style="font-size:11px; color:var(--text-dim); font-family:var(--font-mono);"></span>
+                <span style="font-weight:600; font-size:13px; color:#fff;">🎧 Original Actor Voice (From Training Dataset)</span>
+                <span id="studioRefClipId" style="font-size:11px; color:var(--text-dim); font-family:var(--font-mono);"></span>
               </div>
-              <audio id="studioRefAudio" controls></audio>
+              <div id="studioRefTranscript" style="font-size:12px; color:var(--text-muted); line-height:1.4;">Select a quote on the left to audition original ground-truth stem.</div>
+              <audio id="studioRefAudio" controls style="width:100%;"></audio>
             </div>
 
-            <!-- AI Synthesized Output Card -->
-            <div class="audio-player-card" style="border-color:var(--accent-cyan); background:rgba(6, 182, 212, 0.04);">
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-weight:600; font-size:13px; color:var(--accent-cyan);">✨ AI Voice Output (Generated Speech)</span>
-                <span id="studioGeneratedMeta" style="font-size:11px; color:var(--text-dim); font-family:var(--font-mono);">Awaiting generation</span>
-              </div>
-              <audio id="studioGeneratedAudio" controls></audio>
-            </div>
-
-            <div style="background:var(--bg-surface-elevated); border:1px solid var(--border-subtle); border-radius:8px; padding:14px; font-size:13px; color:var(--text-muted); line-height:1.5;">
-              <strong style="color:#fff;">💡 Direct Comparison:</strong> Play the actor's original discrete stem above, then hit Generate to hear the synthesized voice clone side-by-side. The neural models clone the timbre, resonance, and cadence directly.
+            <!-- Dynamic Multi-Engine Generated Audio Cards -->
+            <div class="multi-player-grid" id="multiPlayerGrid">
+              <!-- Engine cards populated dynamically -->
             </div>
           </div>
         </div>

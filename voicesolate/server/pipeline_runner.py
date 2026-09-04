@@ -252,11 +252,27 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                             stage="demucs",
                             message=f"[{idx+1}/{len(char_clips)}] Demucs vocal isolation: {clip.text[:40]}..."
                         )
+                        job_manager.update_worker_state(
+                            job_id=job_id,
+                            worker_id="worker-demucs-1",
+                            state="enhancing",
+                            chunk_start=clip.start_sec,
+                            chunk_end=clip.end_sec,
+                            snippet=f"Isolating ({idx+1}/{len(char_clips)}): {clip.text[:35]}..."
+                        )
                         enhancer.clean_and_enhance_file(
                             str(raw_file),
                             str(enh_file),
                             media_key=aligner.media_key,
                             timecode_str=clip.timecode_str
+                        )
+                        job_manager.update_worker_state(
+                            job_id=job_id,
+                            worker_id="worker-demucs-1",
+                            state="matched",
+                            chunk_start=clip.start_sec,
+                            chunk_end=clip.end_sec,
+                            snippet=f"Isolated: {clip.text[:35]}..."
                         )
 
                 clip_dict = {

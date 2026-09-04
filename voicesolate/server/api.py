@@ -1,12 +1,16 @@
 import os
+import sys
 import re
 import json
+import shutil
 import asyncio
 import logging
+import subprocess
+import urllib.parse
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, BackgroundTasks
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
@@ -16,6 +20,8 @@ from .job_manager import job_manager
 from .engine_service import engine_service
 from .pipeline_runner import run_scan_job, run_pipeline_job
 from ..waveform import generate_macro_waveform_from_manifest, extract_peaks_from_wav
+from ..script_parser import ScriptParser
+from ..model_trainer import ModelTrainer
 
 logger = logging.getLogger("voicesolate.api")
 
@@ -67,6 +73,25 @@ class SynthesizeRequest(BaseModel):
     seed: int = 42
     ref_audio_path: Optional[str] = None
 
+class BatchSynthesizeRequest(BaseModel):
+    character_name: str
+    episode_name: Optional[str] = None
+    engines: List[str]
+    text: str
+    speed: float = 1.0
+    seed: int = 42
+    ref_audio_path: Optional[str] = None
+
+class TrainModelRequest(BaseModel):
+    character_name: str
+    episode_name: Optional[str] = None
+    engine: str
+
+class ClearStepRequest(BaseModel):
+    step: int
+    episode_name: Optional[str] = None
+    character_name: Optional[str] = None
+
 class InstallEngineRequest(BaseModel):
     engine: str
     params: Optional[Dict[str, Any]] = None
@@ -104,14 +129,105 @@ def install_engine(req: InstallEngineRequest, background_tasks: BackgroundTasks)
     def _do_install(job_id: str, engine_id: str):
         try:
             job_manager.update_job(job_id, progress=20.0, stage="installing", message=f"Configuring {engine_id} engine...")
-            time_wait = 1.5
-            import time; time.sleep(time_wait)
-            job_manager.update_job(job_id, progress=100.0, stage="complete", status="completed", message=f"{engine_id} configured successfully.")
+            pkg_map = {
+                "piper": "piper-tts",
+                "piper-tts": "piper-tts",
+                "xtts": "TTS",
+                "xtts-v2": "TTS",
+                "f5-tts": "f5-tts",
+                "f5tts": "f5-tts"
+            }
+            pkg = pkg_map.get(engine_id.lower(), engine_id)
+            proc = subprocess.run([sys.executable, "-m", "pip", "install", pkg], capture_output=True, text=True, timeout=180)
+            if proc.returncode != 0:
+                logger.error(f"pip install failed: {proc.stderr}")
+                raise RuntimeError(proc.stderr[:200] or "pip install failed")
+            import importlib
+            importlib.invalidate_caches()
+            job_manager.update_job(job_id, progress=100.0, stage="complete", status="completed", message=f"{engine_id} ({pkg}) installed successfully.")
         except Exception as e:
             job_manager.update_job(job_id, status="failed", error=str(e), message=f"Installation failed: {e}")
 
     background_tasks.add_task(_do_install, job.job_id, req.engine)
     return {"job_id": job.job_id, "status": "queued"}
+
+# ----------------- SCRIPT DETECTION & UPLOAD -----------------
+
+@app.get("/api/v1/scripts/detect")
+def detect_script(filename: str):
+    """
+    Detects episode identifier (e.g. s06e01) from media filename and
+    loads corresponding script & speaking characters.
+    """
+    fname = Path(filename).name
+    m = re.search(r"s0?(\d+)[ex]0?(\d+)", fname, re.IGNORECASE)
+    ep_code = None
+    if m:
+        s, e = int(m.group(1)), int(m.group(2))
+        ep_code = f"s{s:02d}e{e:02d}"
+
+    characters = []
+    dialogues_count = 0
+    provider = "startrek"
+    
+    if ep_code:
+        try:
+            parser = ScriptParser(use_cache=True)
+            dialogues, _ = parser.fetch_or_load(ep_code, provider="startrek")
+            dialogues_count = len(dialogues)
+            for c in parser.get_characters_sorted():
+                if c.line_count >= 1:
+                    est_sec = c.line_count * 3.2
+                    characters.append({
+                        "name": c.name,
+                        "lines": c.line_count,
+                        "words": c.word_count,
+                        "estimated_duration_min": round(est_sec / 60.0, 1)
+                    })
+        except Exception as e:
+            logger.warning(f"Script detection fetch failed: {e}")
+
+    return {
+        "filename": fname,
+        "detected_episode": ep_code,
+        "provider": provider if ep_code else "generic",
+        "dialogues_count": dialogues_count,
+        "characters": characters
+    }
+
+@app.post("/api/v1/scripts/upload")
+async def upload_script(file: UploadFile = File(...)):
+    """
+    Accepts uploaded script/subtitle files (.srt, .txt, .json),
+    parses dialogue lines, and returns discovered character roster.
+    """
+    scripts_dir = Path("./cache/scripts").resolve()
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    
+    dest_path = scripts_dir / file.filename
+    content = await file.read()
+    with open(dest_path, "wb") as f:
+        f.write(content)
+        
+    parser = ScriptParser(use_cache=False)
+    dialogues, _ = parser.fetch_or_load(str(dest_path))
+    characters = []
+    for c in parser.get_characters_sorted():
+        if c.line_count >= 1:
+            est_sec = c.line_count * 3.2
+            characters.append({
+                "name": c.name,
+                "lines": c.line_count,
+                "words": c.word_count,
+                "estimated_duration_min": round(est_sec / 60.0, 1)
+            })
+
+    return {
+        "filename": file.filename,
+        "saved_path": str(dest_path),
+        "dialogues_count": len(dialogues),
+        "characters": characters
+    }
 
 # ----------------- EPISODES & MANIFESTS -----------------
 
@@ -275,6 +391,146 @@ def synthesize_speech(req: SynthesizeRequest):
     except Exception as e:
         logger.exception("Synthesis failed")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/synthesize/batch")
+def synthesize_batch(req: BatchSynthesizeRequest):
+    """
+    Synthesizes speech across multiple checked models concurrently/sequentially.
+    """
+    char_dir = _find_character_dir(req.character_name, req.episode_name)
+    if not char_dir:
+        raise HTTPException(status_code=404, detail=f"Character directory for '{req.character_name}' not found.")
+
+    results = {}
+    for eng in req.engines:
+        try:
+            res = engine_service.synthesize(
+                character_dir=char_dir,
+                engine_id=eng,
+                text=req.text,
+                speed=req.speed,
+                seed=req.seed,
+                ref_audio_path=req.ref_audio_path
+            )
+            results[eng] = {"status": "success", **res}
+        except Exception as e:
+            logger.warning(f"Synthesis error for {eng}: {e}")
+            results[eng] = {"status": "error", "error": str(e)}
+
+    return {
+        "character": req.character_name,
+        "text": req.text,
+        "results": results
+    }
+
+# ----------------- TRAINING & MODEL COMPILATION -----------------
+
+@app.post("/api/v1/training/train")
+def train_model(req: TrainModelRequest, background_tasks: BackgroundTasks):
+    """
+    Triggers on-demand training or compilation for a specific model architecture.
+    """
+    char_dir = _find_character_dir(req.character_name, req.episode_name)
+    if not char_dir:
+        raise HTTPException(status_code=404, detail=f"Character directory for '{req.character_name}' not found.")
+
+    job = job_manager.create_job("train", req.dict())
+
+    def _do_train(job_id: str, cdir: Path, eng: str):
+        try:
+            job_manager.update_job(job_id, progress=10.0, stage="train", message=f"Initializing training for {eng.upper()} ({cdir.name})...")
+            trainer = ModelTrainer(cdir)
+            datasets = {
+                "piper": cdir / "datasets" / "piper",
+                "xtts": cdir / "datasets" / "xtts",
+                "f5tts": cdir / "datasets" / "f5tts"
+            }
+            eng_norm = eng.lower().replace("-", "").replace("_", "")
+            if "piper" in eng_norm or "onnx" in eng_norm:
+                job_manager.update_job(job_id, progress=30.0, stage="train", message="Configuring Piper VITS & LJSpeech dataset...")
+                res = trainer.train_piper(datasets["piper"])
+            elif "xtts" in eng_norm:
+                job_manager.update_job(job_id, progress=30.0, stage="train", message="Computing Coqui XTTS-v2 speaker conditioning latents...")
+                res = trainer.train_xtts(datasets["xtts"])
+            elif "f5" in eng_norm:
+                job_manager.update_job(job_id, progress=30.0, stage="train", message="Configuring F5-TTS reference prompt pack & DiT profile...")
+                res = trainer.train_f5tts(datasets["f5tts"])
+            else:
+                raise ValueError(f"Unknown engine: {eng}")
+
+            job_manager.update_job(
+                job_id,
+                progress=100.0,
+                stage="complete",
+                status="completed",
+                message=f"✓ {eng.upper()} voice model prepared successfully for {cdir.name}!",
+                result={"model_dir": str(res)} if res else {}
+            )
+        except Exception as e:
+            logger.exception("Training failed")
+            job_manager.update_job(job_id, status="failed", error=str(e), message=f"Training error: {e}")
+
+    background_tasks.add_task(_do_train, job.job_id, char_dir, req.engine)
+    return {"job_id": job.job_id, "status": "queued"}
+
+# ----------------- WIZARD STEP CLEARING -----------------
+
+@app.post("/api/v1/steps/clear")
+def clear_step(req: ClearStepRequest):
+    """
+    Clears state and cache files corresponding to a specific wizard step.
+    """
+    step = req.step
+    cleared = []
+
+    if step == 1:
+        return {"status": "cleared", "step": 1, "details": "Reset step 1 selections"}
+
+    elif step == 2:
+        char_dir = _find_character_dir(req.character_name, req.episode_name)
+        if char_dir:
+            raw_dir = char_dir / "raw"
+            if raw_dir.exists():
+                shutil.rmtree(raw_dir, ignore_errors=True)
+                cleared.append(str(raw_dir))
+            enh_dir = char_dir / "enhanced"
+            if enh_dir.exists():
+                shutil.rmtree(enh_dir, ignore_errors=True)
+                cleared.append(str(enh_dir))
+
+        ep_dir = _find_episode_dir(req.episode_name) if req.episode_name else None
+        if ep_dir:
+            manifest_file = ep_dir / "manifest.json"
+            if manifest_file.exists():
+                manifest_file.unlink(missing_ok=True)
+                cleared.append(str(manifest_file))
+
+        return {"status": "cleared", "step": 2, "cleared": cleared}
+
+    elif step == 3:
+        char_dir = _find_character_dir(req.character_name, req.episode_name)
+        if char_dir:
+            ds_dir = char_dir / "datasets"
+            if ds_dir.exists():
+                shutil.rmtree(ds_dir, ignore_errors=True)
+                cleared.append(str(ds_dir))
+            models_dir = char_dir / "models"
+            if models_dir.exists():
+                shutil.rmtree(models_dir, ignore_errors=True)
+                cleared.append(str(models_dir))
+        return {"status": "cleared", "step": 3, "cleared": cleared}
+
+    elif step == 4:
+        cache_dir = Path("cache/synthesized").resolve()
+        if cache_dir.exists():
+            for f in cache_dir.glob("*.wav"):
+                if not req.character_name or req.character_name.upper() in f.name.upper():
+                    f.unlink(missing_ok=True)
+                    cleared.append(str(f))
+        return {"status": "cleared", "step": 4, "cleared": cleared}
+
+    else:
+        raise HTTPException(status_code=400, detail=f"Invalid step: {step}")
 
 # ----------------- AUDIO STREAMING -----------------
 

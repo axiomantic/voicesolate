@@ -63,9 +63,46 @@ class VoicesolateAPI {
   getJobStatus(jobId) { return this.get(`/api/v1/jobs/${encodeURIComponent(jobId)}`); }
   cancelJob(jobId) { return this.post(`/api/v1/jobs/${encodeURIComponent(jobId)}/cancel`); }
 
+  // Script Detection & Custom Upload
+  detectScript(filename) {
+    return this.get("/api/v1/scripts/detect", { filename });
+  }
+
+  async uploadScript(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(this.baseUrl + "/api/v1/scripts/upload", {
+      method: "POST",
+      body: formData
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || `Upload failed with ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  // Model Training
+  trainModel(params) {
+    return this.post("/api/v1/training/train", params);
+  }
+
+  // Wizard Step Clearing
+  clearStep(step, episodeName, characterName) {
+    return this.post("/api/v1/steps/clear", {
+      step: step,
+      episode_name: episodeName || null,
+      character_name: characterName || null
+    });
+  }
+
   // Synthesis
   synthesize(params) {
     return this.post("/api/v1/synthesize", params);
+  }
+
+  synthesizeBatch(params) {
+    return this.post("/api/v1/synthesize/batch", params);
   }
 
   // WebSocket Subscription

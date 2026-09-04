@@ -10,6 +10,10 @@ from typing import Dict, Any, List, Optional, Tuple
 import soundfile as sf
 import torch
 import warnings
+import urllib.parse
+import logging
+
+logger = logging.getLogger("voicesolate.engine_service")
 
 # Suppress harmless upstream deprecation notices from PyTorch and Hugging Face transformers
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -124,6 +128,28 @@ class EngineService:
             f5_ready = f5_pkg
             xtts_ready = xtts_pkg
 
+        # Check model files on disk
+        f5_model_path = None
+        xtts_model_path = None
+        f5_dataset_path = None
+        xtts_dataset_path = None
+        piper_dataset_path = None
+
+        if character_dir and Path(character_dir).exists():
+            cdir = Path(character_dir)
+            if (cdir / "models" / "f5tts" / "f5_profile.json").exists():
+                f5_model_path = str((cdir / "models" / "f5tts" / "f5_profile.json").resolve())
+            if (cdir / "datasets" / "f5tts").exists():
+                f5_dataset_path = str((cdir / "datasets" / "f5tts").resolve())
+
+            if (cdir / "models" / "xtts" / "speaker_profile.json").exists():
+                xtts_model_path = str((cdir / "models" / "xtts" / "speaker_profile.json").resolve())
+            if (cdir / "datasets" / "xtts").exists():
+                xtts_dataset_path = str((cdir / "datasets" / "xtts").resolve())
+
+            if (cdir / "datasets" / "piper").exists():
+                piper_dataset_path = str((cdir / "datasets" / "piper").resolve())
+
         engines = [
             {
                 "id": "f5-tts",
@@ -131,6 +157,9 @@ class EngineService:
                 "architecture": "Flow-Matching Diffusion Transformer (24kHz)",
                 "installed": f5_pkg,
                 "ready": f5_ready,
+                "trained": f5_ready and (f5_model_path is not None or f5_dataset_path is not None),
+                "model_path": f5_model_path,
+                "dataset_path": f5_dataset_path,
                 "type": "zero_shot",
                 "description": "State-of-the-art flow matching zero-shot voice cloning with natural cadence and tone matching.",
                 "install_hint": "pip install f5-tts" if not f5_pkg else None
@@ -141,6 +170,9 @@ class EngineService:
                 "architecture": "Autoregressive GPT + Diffusion Latents (24kHz)",
                 "installed": xtts_pkg,
                 "ready": xtts_ready,
+                "trained": xtts_ready and (xtts_model_path is not None or xtts_dataset_path is not None),
+                "model_path": xtts_model_path,
+                "dataset_path": xtts_dataset_path,
                 "type": "zero_shot",
                 "description": "Deep autoregressive speaker latent cloning, multilingual with high emotional expression.",
                 "install_hint": "pip install TTS" if not xtts_pkg else None
@@ -151,8 +183,10 @@ class EngineService:
                 "architecture": "Fast CPU Neural VITS Inference (22.05kHz)",
                 "installed": piper_pkg,
                 "ready": piper_ready,
+                "trained": piper_ready and piper_onnx_path is not None,
                 "dataset_ready": piper_dataset_ready,
-                "onnx_model": piper_onnx_path,
+                "model_path": piper_onnx_path,
+                "dataset_path": piper_dataset_path,
                 "type": "compiled_onnx",
                 "description": "Ultra-fast, lightweight embedded neural voice running locally on CPU in real-time.",
                 "install_hint": "pip install piper-tts" if not piper_pkg else None
@@ -160,23 +194,44 @@ class EngineService:
         ]
         return engines
 
-    def get_character_dialogue_quotes(self, character_dir: Path) -> List[str]:
-        """Extracts unique spoken lines for this character as quote presets."""
-        quotes = list(self.DEFAULT_QUOTES)
+    def get_character_dialogue_quotes(self, character_dir: Path) -> List[Dict[str, Any]]:
+        """Extracts unique spoken lines for this character as quote presets with dataset audio links."""
+        quotes = []
         try:
             meta_file = Path(character_dir) / "datasets" / "piper" / "metadata.csv"
+            wavs_dir = Path(character_dir) / "datasets" / "piper" / "wavs"
             if meta_file.exists():
-                lines = []
                 with open(meta_file, "r", encoding="utf-8") as f:
                     for l in f:
                         parts = l.strip().split("|")
-                        if len(parts) >= 2 and len(parts[1]) > 20:
-                            lines.append(parts[1])
-                if lines:
-                    # Prepend top 5 character show lines
-                    quotes = lines[:6] + [q for q in self.DEFAULT_QUOTES if q not in lines]
-        except Exception:
-            pass
+                        if len(parts) >= 2 and len(parts[1]) > 15:
+                            clip_id = parts[0]
+                            quote_text = parts[1]
+                            wav_path = wavs_dir / f"{clip_id}.wav"
+                            url = None
+                            if wav_path.exists():
+                                url = f"/api/v1/audio/stream?path={urllib.parse.quote(str(wav_path.resolve()))}"
+                            quotes.append({
+                                "text": quote_text,
+                                "clip_id": clip_id,
+                                "wav_path": str(wav_path.resolve()) if wav_path.exists() else None,
+                                "stream_url": url
+                            })
+                            if len(quotes) >= 12:
+                                break
+        except Exception as e:
+            logger.debug(f"Error reading dataset quotes: {e}")
+
+        # Add fallback famous quotes if needed
+        seen_texts = {q["text"] for q in quotes}
+        for def_q in self.DEFAULT_QUOTES:
+            if def_q not in seen_texts:
+                quotes.append({
+                    "text": def_q,
+                    "clip_id": None,
+                    "wav_path": None,
+                    "stream_url": None
+                })
         return quotes
 
     def get_reference_prompts(self, character_dir: Path) -> List[Dict[str, Any]]:
