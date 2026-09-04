@@ -103,7 +103,9 @@ class VoicesolateWizardApp {
     }
 
     // Step-specific transition actions
-    if (step === 2) {
+    if (step === 1) {
+      this.onEnterStep1();
+    } else if (step === 2) {
       this.onEnterStep2();
     } else if (step === 3) {
       this.onEnterStep3();
@@ -402,8 +404,20 @@ class VoicesolateWizardApp {
     }
   }
 
-  selectCharacter(charName) {
+  selectCharacter(charName, isUserAction = true) {
+    const isDifferent = isUserAction && Boolean(this.selectedCharacter && charName && this.selectedCharacter.toUpperCase() !== charName.toUpperCase());
     this.selectedCharacter = charName;
+
+    if (isDifferent) {
+      // Different character selected: invalidate downstream steps
+      this.alignedClips = [];
+      this.selectedClip = null;
+      if (this.radar) {
+        this.radar.clear(`Selected new character: ${charName}. Ready to search.`);
+      }
+      this.markStepIncomplete(2);
+    }
+
     const badge = document.getElementById("wizardCharStatsBadge");
     const charObj = this.scriptCharacters.find(c => c.name.toUpperCase() === (charName || "").toUpperCase());
 
@@ -450,17 +464,53 @@ class VoicesolateWizardApp {
     this.updateStep1Checklist();
   }
 
+  onEnterStep1() {
+    const inputPath = document.getElementById("wizardInputPath");
+    const episodeInput = document.getElementById("wizardEpisodeInput");
+    const charContainer = document.getElementById("wizardCharacterContainer");
+    const episodeBadge = document.getElementById("wizardEpisodeBadge");
+
+    if (inputPath && this.mediaPath && !inputPath.value) {
+      inputPath.value = this.mediaPath;
+    }
+    if (episodeInput && this.episodeCode && !episodeInput.value) {
+      episodeInput.value = this.episodeCode;
+    }
+    if (episodeBadge && this.episodeCode) {
+      const m = this.episodeCode.match(/s0?(\d+)[ex]0?(\d+)/i);
+      if (m) {
+        episodeBadge.innerText = `✓ Detected Season ${parseInt(m[1], 10)} Episode ${parseInt(m[2], 10)}`;
+        episodeBadge.style.display = "inline-block";
+      }
+    }
+
+    if (this.scriptCharacters && this.scriptCharacters.length > 0) {
+      if (charContainer) charContainer.style.display = "flex";
+      const tbody = document.getElementById("wizardCharactersTbody");
+      if (tbody && tbody.children.length === 0) {
+        this.renderCharacterTable(this.scriptCharacters, this.selectedCharacter);
+      }
+    }
+
+    if (this.selectedCharacter) {
+      this.selectCharacter(this.selectedCharacter, false);
+    }
+
+    this.updateStep1Checklist();
+  }
+
   updateStep1Checklist() {
     const hasMedia = Boolean(this.mediaPath && this.mediaPath.trim().length > 0);
     const hasEpisode = Boolean(this.episodeCode && this.episodeCode.trim().length > 0);
-    const hasScript = Boolean(this.scriptLoaded);
+    const hasScript = Boolean(this.scriptLoaded || (this.scriptCharacters && this.scriptCharacters.length > 0));
     const hasChar = Boolean(this.selectedCharacter && this.selectedCharacter.trim().length > 0);
 
     const setItem = (id, checked) => {
       const el = document.getElementById(id);
       if (el) {
         el.className = `checklist-item ${checked ? 'checked' : ''}`;
-        el.querySelector("span").innerText = checked ? "✓" : "⚪";
+        const span = el.querySelector("span");
+        if (span) span.innerText = checked ? "✓" : "⚪";
       }
     };
 
@@ -478,7 +528,10 @@ class VoicesolateWizardApp {
     if (allReady) {
       this.markStepCompleted(1);
     } else {
-      this.markStepIncomplete(1);
+      // Only mark incomplete if Step 1 was not previously completed or required items were cleared
+      if (!this.completedSteps.has(1) || !hasMedia || !hasChar) {
+        this.markStepIncomplete(1);
+      }
     }
   }
 
@@ -638,7 +691,15 @@ class VoicesolateWizardApp {
 
   async loadMacroWaveform(force = false) {
     if (this.radar) {
-      setTimeout(() => this.radar.resize(), 50);
+      setTimeout(() => {
+        this.radar.resize();
+        if (this.waveformData) {
+          this.radar.setData(this.waveformData);
+          if (this.alignedClips && this.alignedClips.length > 0) {
+            this.radar.setClips(this.alignedClips);
+          }
+        }
+      }, 50);
     }
 
     const loadingBanner = document.getElementById("waveformLoadingBanner");
@@ -696,7 +757,7 @@ class VoicesolateWizardApp {
     if (!this.selectedCharacter) return;
     try {
       const details = await api.getCharacterDetails(this.selectedCharacter, this.episodeName);
-      const clipCount = details?.dataset_stats?.clip_count || 0;
+      const clipCount = details?.dataset_stats?.clip_count || (this.alignedClips ? this.alignedClips.length : 0);
       const nextBtn = document.getElementById("step2NextBtn");
       const radarClipsEl = document.getElementById("radarClipsCount");
       const extStatusEl = document.getElementById("step2ExtractionStatusText");
@@ -704,15 +765,16 @@ class VoicesolateWizardApp {
 
       if (clipCount > 0) {
         if (radarClipsEl) radarClipsEl.innerText = `${clipCount} clips`;
-        const durFormatted = details.dataset_stats?.total_duration_formatted || this.humanizeSpeakingTime(details.dataset_stats?.total_duration_sec || (clipCount * 3.2));
+        const durFormatted = details?.dataset_stats?.total_duration_formatted || this.humanizeSpeakingTime(details?.dataset_stats?.total_duration_sec || (clipCount * 3.2));
         if (extStatusEl) extStatusEl.innerText = `✓ Found ${clipCount} existing neural clips for ${this.selectedCharacter} (${durFormatted})`;
         if (gatingStatusEl) gatingStatusEl.innerText = `✓ Complete! ${clipCount} clips matched and isolated for ${this.selectedCharacter} (${durFormatted}).`;
         if (nextBtn) nextBtn.disabled = false;
         this.markStepCompleted(2);
 
         // Re-enter state: populate radar, Stage A & Stage B done queues, and inspector
-        if (details.clips && details.clips.length > 0) {
-          this.alignedClips = details.clips;
+        const clipsToUse = (details?.clips && details.clips.length > 0) ? details.clips : this.alignedClips;
+        if (clipsToUse && clipsToUse.length > 0) {
+          this.alignedClips = clipsToUse;
           if (this.radar) {
             this.radar.setClips(this.alignedClips);
           }
@@ -768,35 +830,31 @@ class VoicesolateWizardApp {
           }
 
           // Open inspector for the first clip so user can see raw vs isolated immediately
-          if (this.alignedClips.length > 0) {
+          if (this.alignedClips.length > 0 && !this.selectedClip) {
             this.handleClipSelected(this.alignedClips[0]);
           }
         }
       } else {
-        if (radarClipsEl) radarClipsEl.innerText = "0 clips";
-        if (extStatusEl) extStatusEl.innerText = "No clips extracted yet. Ready to search.";
-        if (gatingStatusEl) gatingStatusEl.innerText = "Awaiting audio extraction. Click Start Search to begin.";
-        if (nextBtn) nextBtn.disabled = true;
-        this.markStepIncomplete(2);
-        if (this.radar) {
-          this.radar.clips = [];
-          this.radar.draw();
+        if (!this.completedSteps.has(2)) {
+          if (radarClipsEl) radarClipsEl.innerText = "0 clips";
+          if (extStatusEl) extStatusEl.innerText = "No clips extracted yet. Ready to search.";
+          if (gatingStatusEl) gatingStatusEl.innerText = "Awaiting audio extraction. Click Start Search to begin.";
+          if (nextBtn) nextBtn.disabled = true;
+          this.markStepIncomplete(2);
+          if (this.radar) {
+            this.radar.clips = [];
+            this.radar.draw();
+          }
         }
       }
     } catch (e) {
       console.warn("Could not check existing clips:", e);
-      const nextBtn = document.getElementById("step2NextBtn");
-      const radarClipsEl = document.getElementById("radarClipsCount");
-      const extStatusEl = document.getElementById("step2ExtractionStatusText");
-      const gatingStatusEl = document.getElementById("step2GatingStatus");
-      if (radarClipsEl) radarClipsEl.innerText = "0 clips";
-      if (extStatusEl) extStatusEl.innerText = "No clips extracted yet. Ready to search.";
-      if (gatingStatusEl) gatingStatusEl.innerText = "Awaiting audio extraction. Click Start Search to begin.";
-      if (nextBtn) nextBtn.disabled = true;
-      this.markStepIncomplete(2);
-      if (this.radar) {
-        this.radar.clips = [];
-        this.radar.draw();
+      // Retain existing state if we already have clips or completed step 2
+      if (this.alignedClips && this.alignedClips.length > 0) {
+        if (this.radar) this.radar.setClips(this.alignedClips);
+        const nextBtn = document.getElementById("step2NextBtn");
+        if (nextBtn) nextBtn.disabled = false;
+        this.markStepCompleted(2);
       }
     }
   }
@@ -1124,6 +1182,9 @@ class VoicesolateWizardApp {
       if (nextBtn) nextBtn.disabled = false;
       if (statusText) statusText.innerText = "✓ At least one model is trained and ready for synthesis.";
       this.markStepCompleted(3);
+    } else if (this.completedSteps.has(3)) {
+      if (nextBtn) nextBtn.disabled = false;
+      if (statusText) statusText.innerText = "✓ Voice model ready for synthesis.";
     } else {
       if (nextBtn) nextBtn.disabled = true;
       if (statusText) statusText.innerText = "Compile or train at least one voice model to proceed.";
@@ -1367,6 +1428,26 @@ class VoicesolateWizardApp {
           }
         }
       });
+
+      // Restore dialogue text if present
+      const textArea = document.getElementById("studioDialogueText");
+      if (textArea) {
+        if (this.dialogueText && !textArea.value) {
+          textArea.value = this.dialogueText;
+        } else if (textArea.value) {
+          this.dialogueText = textArea.value;
+        }
+      }
+
+      // Restore player cards if grid is empty
+      const grid = document.getElementById("multiPlayerGrid");
+      if (grid && grid.children.length === 0) {
+        if (this.lastSynthesizedResults && Object.keys(this.lastSynthesizedResults).length > 0) {
+          this.renderSynthesizedPlayerCards(this.lastSynthesizedResults);
+        } else if (details?.cached_syntheses && details.cached_syntheses.length > 0) {
+          this.renderCachedSynthesesCards(details.cached_syntheses);
+        }
+      }
     } catch (err) {
       console.warn("Step 4 init error:", err);
     }
@@ -1456,12 +1537,69 @@ class VoicesolateWizardApp {
           }
         }
       });
+
+      if (batchRes && batchRes.results) {
+        this.lastSynthesizedResults = batchRes.results;
+        this.markStepCompleted(4);
+      }
     } catch (err) {
       alert("Batch synthesis error: " + err.message);
     } finally {
       synthBtn.disabled = false;
       synthBtn.innerHTML = "<span>🎙️</span><span>Synthesize Selected Models</span>";
     }
+  }
+
+  renderSynthesizedPlayerCards(results) {
+    const grid = document.getElementById("multiPlayerGrid");
+    if (!grid) return;
+    grid.innerHTML = "";
+
+    Object.entries(results).forEach(([eng, res]) => {
+      const card = document.createElement("div");
+      card.className = "audio-player-card";
+      card.id = `player_card_${eng}`;
+      card.style.borderColor = res.status === "success" ? "var(--accent-cyan)" : "var(--accent-red)";
+      card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <strong style="color:var(--accent-cyan); font-size:13px;">✨ ${eng.toUpperCase()} AI Voice</strong>
+            <span style="font-size:11px; color:var(--text-dim);" id="meta_${eng}">
+              ${res.status === "success" ? `✓ Generated ${res.duration}s (${res.samplerate}Hz)` : `❌ Error: ${res.error || 'Failed'}`}
+            </span>
+          </div>
+          <span class="badge ${res.status === "success" ? 'badge-ready' : 'badge-locked'}" id="badge_${eng}">
+            ${res.status === "success" ? 'Ready' : 'Failed'}
+          </span>
+        </div>
+        <audio id="audio_${eng}" controls src="${res.url || ''}" style="width:100%; margin-top:8px;"></audio>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  renderCachedSynthesesCards(cachedList) {
+    const grid = document.getElementById("multiPlayerGrid");
+    if (!grid) return;
+    grid.innerHTML = "";
+
+    cachedList.forEach((item, idx) => {
+      const card = document.createElement("div");
+      card.className = "audio-player-card";
+      card.id = `player_card_cached_${idx}`;
+      card.style.borderColor = "rgba(255,255,255,0.15)";
+      card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <strong style="color:var(--accent-cyan); font-size:13px;">🎙️ Previous Session Synthesis</strong>
+            <span style="font-size:11px; color:var(--text-dim);">${item.duration}s • ${item.samplerate}Hz • ${item.filename}</span>
+          </div>
+          <span class="badge badge-ready">Cached</span>
+        </div>
+        <audio controls src="${item.url}" style="width:100%; margin-top:8px;"></audio>
+      `;
+      grid.appendChild(card);
+    });
   }
 
   // ----------------- WEBSOCKET & JOB EVENTS -----------------

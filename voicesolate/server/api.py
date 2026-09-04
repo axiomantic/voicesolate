@@ -423,6 +423,24 @@ def get_character_details(character_name: str, episode: Optional[str] = None):
         except Exception:
             total_duration_sec = total_clips * 3.2
 
+    cached_synths = []
+    synth_cache_dir = Path("cache/synthesized").resolve()
+    if synth_cache_dir.exists():
+        for w in sorted(synth_cache_dir.glob("*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)[:6]:
+            try:
+                import urllib.parse
+                import soundfile as sf
+                info = sf.info(str(w))
+                cached_synths.append({
+                    "file_path": str(w),
+                    "url": f"/api/v1/audio/stream?path={urllib.parse.quote(str(w.resolve()))}",
+                    "filename": w.name,
+                    "duration": round(info.duration, 2),
+                    "samplerate": info.samplerate
+                })
+            except Exception:
+                pass
+
     return {
         "character_name": character_name,
         "directory": str(char_dir.resolve()),
@@ -430,6 +448,7 @@ def get_character_details(character_name: str, episode: Optional[str] = None):
         "reference_prompts": ref_prompts,
         "engines": engines,
         "clips": char_clips,
+        "cached_syntheses": cached_synths,
         "dataset_stats": {
             "clip_count": total_clips,
             "total_duration_sec": round(total_duration_sec, 2),

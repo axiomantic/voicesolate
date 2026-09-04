@@ -28,8 +28,18 @@ export class WaveformRadar {
   initCanvas() {
     const rect = this.canvas.getBoundingClientRect();
     this.dpr = window.devicePixelRatio || 1;
-    this.width = rect.width;
-    this.height = rect.height || 220;
+    let w = rect.width;
+    let h = rect.height;
+
+    if (!w || w < 50) {
+      w = (this.canvas.parentElement && this.canvas.parentElement.clientWidth > 50) ? this.canvas.parentElement.clientWidth : 800;
+    }
+    if (!h || h < 50) {
+      h = 220;
+    }
+
+    this.width = w;
+    this.height = h;
 
     this.canvas.width = this.width * this.dpr;
     this.canvas.height = this.height * this.dpr;
@@ -82,6 +92,21 @@ export class WaveformRadar {
       this.clips.push(clipData);
       this.draw();
     }
+  }
+
+  setClips(clips) {
+    this.clips = Array.isArray(clips) ? [...clips] : [];
+    this.draw();
+  }
+
+  highlightSegment(startSec, endSec) {
+    const found = this.clips.find(c => Math.abs(c.start_sec - startSec) < 0.2);
+    if (found) {
+      this.activeClip = found;
+    } else {
+      this.activeClip = { start_sec: startSec, end_sec: endSec, text: "Selected dialogue" };
+    }
+    this.draw();
   }
 
   formatTime(seconds) {
