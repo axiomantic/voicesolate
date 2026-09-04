@@ -201,6 +201,8 @@ def generate_macro_waveform_for_media(
                 if manifest_path and manifest_path.exists():
                     m = generate_macro_waveform_from_manifest(manifest_path, num_points=num_points, estimated_duration=data["duration"])
                     data["clips"] = m.get("clips", [])
+                else:
+                    data["clips"] = []
                 return data
         except Exception as e:
             logger.debug(f"Failed to load cached waveform {cache_file}: {e}")

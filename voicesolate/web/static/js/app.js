@@ -137,10 +137,17 @@ class VoicesolateWizardApp {
       this.completedSteps.delete(s);
       const stepEl = document.getElementById(`stepperStep${s}`);
       const statusEl = document.getElementById(`step${s}Status`);
-      if (stepEl && this.currentStep !== s) {
-        stepEl.classList.remove("completed", "active");
-        stepEl.classList.add("locked");
-        if (statusEl) statusEl.innerText = "Locked";
+      if (stepEl) {
+        stepEl.classList.remove("completed");
+        if (this.currentStep === s) {
+          stepEl.classList.add("active");
+          stepEl.classList.remove("locked");
+          if (statusEl) statusEl.innerText = "In Progress";
+        } else {
+          stepEl.classList.remove("active");
+          stepEl.classList.add("locked");
+          if (statusEl) statusEl.innerText = "Locked";
+        }
       }
     }
   }
@@ -492,6 +499,8 @@ class VoicesolateWizardApp {
         try {
           await api.clearStep(2, this.episodeName, this.selectedCharacter);
           this.alignedClips = [];
+          this.selectedClip = null;
+
           if (this.radar) {
             this.radar.clips = [];
             this.radar.activeClip = null;
@@ -500,20 +509,37 @@ class VoicesolateWizardApp {
             this.radar.draw();
           }
           this.waveformData = null;
+
           if (this.mediaPath) {
             const ep = this.episodeName || (this.episodeCode ? `Episode_${this.episodeCode}` : "Current_Media");
-            api.getWaveform(ep, this.mediaPath).then(wf => {
-              this.waveformData = wf;
-              if (this.radar) this.radar.setData(wf);
-              if (wf && wf.duration) {
-                const durEl = document.getElementById("radarDurationText");
-                if (durEl) durEl.innerText = this.formatTime(wf.duration);
+            try {
+              const wf = await api.getWaveform(ep, this.mediaPath);
+              if (wf) {
+                wf.clips = []; // Ensure clips are always empty after cache clear
+                this.waveformData = wf;
+                if (this.radar) {
+                  this.radar.setData(wf);
+                  this.radar.clips = [];
+                  this.radar.draw();
+                }
+                if (wf.duration) {
+                  const durEl = document.getElementById("radarDurationText");
+                  if (durEl) durEl.innerText = this.formatTime(wf.duration);
+                }
               }
-            }).catch(() => {});
+            } catch (wfErr) {
+              console.warn("Waveform refresh after clear:", wfErr);
+            }
           }
+
+          const startBtn = document.getElementById("startSearchBtn");
+          if (startBtn) startBtn.disabled = false;
 
           const radarClipsEl = document.getElementById("radarClipsCount");
           if (radarClipsEl) radarClipsEl.innerText = "0 clips";
+
+          const cursorTimeEl = document.getElementById("radarCursorTime");
+          if (cursorTimeEl) cursorTimeEl.innerText = "0:00";
 
           // Reset worker telemetry cards
           const sttBadge = document.getElementById("sttWorkerBadge-worker-stt-1");
@@ -547,6 +573,10 @@ class VoicesolateWizardApp {
 
           const inspector = document.getElementById("clipInspectorContainer");
           if (inspector) inspector.style.display = "none";
+          const rawAudio = document.getElementById("inspectorRawAudio");
+          const enhAudio = document.getElementById("inspectorEnhancedAudio");
+          if (rawAudio) rawAudio.src = "";
+          if (enhAudio) enhAudio.src = "";
 
           if (nextBtn) nextBtn.disabled = true;
           this.markStepIncomplete(2);
@@ -641,6 +671,10 @@ class VoicesolateWizardApp {
         if (gatingStatusEl) gatingStatusEl.innerText = "Awaiting audio extraction. Click Start Search to begin.";
         if (nextBtn) nextBtn.disabled = true;
         this.markStepIncomplete(2);
+        if (this.radar) {
+          this.radar.clips = [];
+          this.radar.draw();
+        }
       }
     } catch (e) {
       const nextBtn = document.getElementById("step2NextBtn");
@@ -652,6 +686,10 @@ class VoicesolateWizardApp {
       if (gatingStatusEl) gatingStatusEl.innerText = "Awaiting audio extraction. Click Start Search to begin.";
       if (nextBtn) nextBtn.disabled = true;
       this.markStepIncomplete(2);
+      if (this.radar) {
+        this.radar.clips = [];
+        this.radar.draw();
+      }
     }
   }
 

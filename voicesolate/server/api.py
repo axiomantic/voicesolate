@@ -580,14 +580,41 @@ def clear_step(req: ClearStepRequest):
                     shutil.rmtree(sub_p, ignore_errors=True)
                     cleared.append(str(sub_p))
 
-        # Clear episode manifest if applicable
-        if req.episode_name:
-            ep_dir = _find_episode_dir(req.episode_name)
-            if ep_dir:
-                manifest_file = ep_dir / "manifest.json"
-                if manifest_file.exists():
-                    manifest_file.unlink(missing_ok=True)
-                    cleared.append(str(manifest_file))
+        # Clear episode manifest across all output roots
+        for out_root in [Path("./output"), Path("./output2")]:
+            if out_root.exists():
+                for ep_d in out_root.iterdir():
+                    if ep_d.is_dir():
+                        match = False
+                        if req.episode_name:
+                            clean_needle = re.sub(r"[^a-zA-Z0-9]", "", req.episode_name.lower())[:15]
+                            clean_d = re.sub(r"[^a-zA-Z0-9]", "", ep_d.name.lower())
+                            if clean_needle in clean_d or clean_d in clean_needle:
+                                match = True
+                        else:
+                            match = True
+                        if match:
+                            manifest_file = ep_d / "manifest.json"
+                            if manifest_file.exists():
+                                manifest_file.unlink(missing_ok=True)
+                                cleared.append(str(manifest_file))
+
+        # Reset clips in cached waveform JSON files
+        cache_wf = Path("cache/waveforms").resolve()
+        if cache_wf.exists():
+            clean_needle = re.sub(r"[^a-zA-Z0-9]", "", (req.episode_name or "").lower())[:15]
+            for f in cache_wf.glob("*.json"):
+                clean_f = re.sub(r"[^a-zA-Z0-9]", "", f.name.lower())
+                if not clean_needle or clean_needle in clean_f:
+                    try:
+                        with open(f, "r", encoding="utf-8") as wf_f:
+                            wf_d = json.load(wf_f)
+                        wf_d["clips"] = []
+                        with open(f, "w", encoding="utf-8") as wf_f:
+                            json.dump(wf_d, wf_f)
+                        cleared.append(str(f))
+                    except Exception:
+                        pass
 
         # Clear STT cache files matching episode or character
         cache_stt = Path("cache/stt").resolve()
@@ -598,6 +625,8 @@ def clear_step(req: ClearStepRequest):
                     match = True
                 if req.character_name and req.character_name.lower() in f.name.lower():
                     match = True
+                if not req.episode_name and not req.character_name:
+                    match = True
                 if match:
                     f.unlink(missing_ok=True)
                     cleared.append(str(f))
@@ -606,9 +635,13 @@ def clear_step(req: ClearStepRequest):
         cache_stems = Path("cache/audio/stems").resolve()
         if cache_stems.exists():
             for d in cache_stems.iterdir():
-                if d.is_dir() and req.episode_name and req.episode_name[:15].lower() in d.name.lower():
-                    shutil.rmtree(d, ignore_errors=True)
-                    cleared.append(str(d))
+                if d.is_dir():
+                    if req.episode_name and req.episode_name[:15].lower() in d.name.lower():
+                        shutil.rmtree(d, ignore_errors=True)
+                        cleared.append(str(d))
+                    elif not req.episode_name:
+                        shutil.rmtree(d, ignore_errors=True)
+                        cleared.append(str(d))
 
         return {"status": "cleared", "step": 2, "cleared": cleared}
 
