@@ -8,6 +8,7 @@ import soundfile as sf
 import numpy as np
 from pathlib import Path
 from urllib.parse import urlparse, unquote
+import shutil
 from typing import Optional, Tuple, List
 
 class AudioExtractor:

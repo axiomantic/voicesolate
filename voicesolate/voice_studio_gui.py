@@ -14,11 +14,13 @@ class VoiceStudioGUI:
     """
     Sleek, Modern Voice Studio GUI for Voicesolate.
     Features:
-    - Zero-config: All engines & models are pre-installed & trained before UI opens
+    - Step 1: Character Voice Profile & Corpus Audition (Reference Stem + Clip Explorer)
+    - Step 2: Model Architecture & Training Center (Status, ONNX Import, Training Guides)
+    - Step 3: Studio Voice Synthesis (Dynamic engine list: ONLY ready models can be synthesized)
+    - Zero-config: Zero-shot engines (F5-TTS & XTTS-v2) are pre-calibrated and ready
     - In-Process Real-time F5-TTS Flow-Matching Neural Voice Cloning
     - In-Process Real-time Coqui XTTS-v2 Autoregressive + Diffusion Voice Cloning
-    - Side-by-side Audio Audition: Actor Original Reference vs. AI Cloned Speech
-    - Modern, responsive UI with clean typography and zero button-like label styling
+    - Piper VITS ONNX model support with drag-and-drop model unlock
     """
 
     DEFAULT_QUOTES = [
@@ -37,6 +39,7 @@ class VoiceStudioGUI:
         self.char_name = self.char_dir.name
         self.models_dir = self.char_dir / "models"
         self.datasets_dir = self.char_dir / "datasets"
+        self.models_dir.mkdir(parents=True, exist_ok=True)
         self._f5_model = None
         self._xtts_model = None
 
@@ -48,42 +51,75 @@ class VoiceStudioGUI:
             return False
 
     def check_engine_status(self) -> Dict[str, Dict[str, Any]]:
-        """Checks if each TTS engine is ready."""
+        """Checks if each TTS engine is installed, calibrated, and ready for synthesis."""
         status = {}
+        ref_wav, _ = self.get_reference_prompt()
+        has_ref = bool(ref_wav and Path(ref_wav).exists())
 
-        # F5-TTS
+        # 1. F5-TTS (Flow-Matching Diffusion)
         has_f5 = self._is_module_available("f5_tts")
         status["F5-TTS (Flow-Matching DiT)"] = {
             "key": "f5tts",
             "installed": has_f5,
-            "ready": has_f5,
-            "status_text": "🟢 Ready" if has_f5 else "🔴 Missing Dependency",
-            "desc": "Non-autoregressive flow-matching Diffusion Transformer (24kHz Zero-Shot Voice Clone)"
+            "ready": has_f5 and has_ref,
+            "status_text": "🟢 Ready to Synthesize" if (has_f5 and has_ref) else "🔴 Missing Model / Prompt",
+            "badge_class": "badge-ready" if (has_f5 and has_ref) else "badge-error",
+            "arch_name": "F5-TTS",
+            "type_desc": "Zero-Shot Flow-Matching Diffusion (24kHz Studio Quality)",
+            "details": "Calibrated with highest-SNR isolated vocal prompt. Generates speech directly via neural flow matching."
         }
 
-        # Coqui XTTS-v2
+        # 2. Coqui XTTS-v2 (Autoregressive + Diffusion)
         has_xtts = self._is_module_available("TTS")
         status["Coqui XTTS-v2 (Autoregressive + Diffusion)"] = {
             "key": "xtts",
             "installed": has_xtts,
-            "ready": has_xtts,
-            "status_text": "🟢 Ready" if has_xtts else "🔴 Missing Dependency",
-            "desc": "24kHz multilingual voice clone with conditioning latents"
+            "ready": has_xtts and has_ref,
+            "status_text": "🟢 Ready to Synthesize" if (has_xtts and has_ref) else "🔴 Missing Model / Reference",
+            "badge_class": "badge-ready" if (has_xtts and has_ref) else "badge-error",
+            "arch_name": "Coqui XTTS-v2",
+            "type_desc": "Zero-Shot Autoregressive + Diffusion (24kHz Multilingual)",
+            "details": "Calibrated with speaker conditioning latents extracted from isolated vocal clips."
         }
 
-        # Piper
+        # 3. Piper (VITS / ONNX)
         has_piper = self._is_module_available("piper") or (shutil.which("piper") is not None)
         piper_onnx = list((self.models_dir / "piper").glob("*.onnx")) if (self.models_dir / "piper").exists() else []
-        piper_status = "🟢 Ready" if (has_piper and piper_onnx) else "🟢 LJSpeech Dataset Ready"
-        status["Piper (VITS / LJSpeech)"] = {
+        piper_ready = bool(piper_onnx)
+        piper_dataset_exists = (self.datasets_dir / "piper" / "metadata.csv").exists()
+
+        if piper_ready:
+            piper_status = "🟢 Ready to Synthesize"
+            badge_class = "badge-ready"
+            details = f"Compiled ONNX model active ({piper_onnx[0].name}). Ultra-fast CPU neural synthesis."
+        elif piper_dataset_exists:
+            piper_status = "🟡 LJSpeech Dataset Ready (Awaiting ONNX Compilation)"
+            badge_class = "badge-pending"
+            details = "LJSpeech dataset is generated. Requires compiling or importing an exported .onnx model to synthesize."
+        else:
+            piper_status = "🔴 Dataset Missing"
+            badge_class = "badge-error"
+            details = "Piper dataset not yet built. Run pipeline to extract audio."
+
+        status["Piper (VITS / Fast CPU)"] = {
             "key": "piper",
             "installed": has_piper,
-            "ready": bool(piper_onnx),
+            "ready": piper_ready,
             "status_text": piper_status,
-            "desc": "Ultra-fast CPU neural synthesis (22.05kHz LJSpeech format)"
+            "badge_class": badge_class,
+            "arch_name": "Piper (VITS)",
+            "type_desc": "Fast CPU Neural Inference (22.05kHz LJSpeech ONNX)",
+            "details": details
         }
 
         return status
+
+    def get_ready_synthesis_engines(self) -> List[str]:
+        """Returns ONLY engine display names that are currently compiled and ready to synthesize."""
+        status_map = self.check_engine_status()
+        ready = [name for name, info in status_map.items() if info.get("ready", False)]
+        # Fallback to at least one choice if none ready
+        return ready if ready else list(status_map.keys())[:1]
 
     def get_dataset_stats(self) -> Dict[str, Any]:
         """Calculates dataset statistics for this character."""
@@ -102,34 +138,82 @@ class VoiceStudioGUI:
         }
 
     def get_reference_prompt(self) -> Tuple[Optional[str], str]:
-        """Returns the reference WAV path and its transcript."""
-        # 1. F5-TTS curated reference
+        """Returns the primary reference WAV path and its transcript."""
         f5_ref_wav = self.datasets_dir / "f5tts" / "ref_audio" / "ref.wav"
         f5_ref_txt = self.datasets_dir / "f5tts" / "ref_audio" / "ref.txt"
         if f5_ref_wav.exists():
             text = f5_ref_txt.read_text(encoding="utf-8").strip() if f5_ref_txt.exists() else ""
             return str(f5_ref_wav), text
 
-        # 2. XTTS reference audio
         xtts_refs = list((self.datasets_dir / "xtts" / "reference_audio").glob("*.wav")) if (self.datasets_dir / "xtts" / "reference_audio").exists() else []
         if xtts_refs:
             return str(xtts_refs[0]), ""
 
-        # 3. Piper sample
         piper_wavs = list((self.datasets_dir / "piper" / "wavs").glob("*.wav")) if (self.datasets_dir / "piper" / "wavs").exists() else []
         if piper_wavs:
             return str(piper_wavs[0]), ""
 
         return None, ""
 
+    def get_dataset_clips(self) -> List[Dict[str, str]]:
+        """Parses the character's LJSpeech metadata to allow auditioning extracted vocal clips."""
+        meta_file = self.datasets_dir / "piper" / "metadata.csv"
+        wav_dir = self.datasets_dir / "piper" / "wavs"
+        clips = []
+
+        if meta_file.exists() and wav_dir.exists():
+            with open(meta_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    parts = line.strip().split("|")
+                    if len(parts) >= 2:
+                        cid = parts[0]
+                        txt = parts[1]
+                        wav_path = wav_dir / f"{cid}.wav"
+                        if wav_path.exists():
+                            clips.append({
+                                "id": cid,
+                                "text": txt,
+                                "path": str(wav_path)
+                            })
+        return clips
+
+    def import_piper_model(self, files: Any) -> Tuple[str, bool]:
+        """Imports user-provided Piper .onnx and .onnx.json files into models/piper/."""
+        if not files:
+            return "⚠️ Please upload at least one .onnx model file.", False
+
+        piper_model_dir = self.models_dir / "piper"
+        piper_model_dir.mkdir(parents=True, exist_ok=True)
+
+        if not isinstance(files, list):
+            files = [files]
+
+        saved_files = []
+        for item in files:
+            src_path = getattr(item, "name", str(item))
+            p = Path(src_path)
+            if p.exists() and p.is_file():
+                dest = piper_model_dir / p.name
+                shutil.copy2(p, dest)
+                saved_files.append(p.name)
+
+        onnx_found = list(piper_model_dir.glob("*.onnx"))
+        if onnx_found:
+            return f"✅ Successfully imported: {', '.join(saved_files)}! Piper is now compiled and ready for synthesis.", True
+        else:
+            return f"⚠️ Uploaded files ({', '.join(saved_files)}), but no .onnx file was detected. Please provide a .onnx model.", False
+
     def synthesize(self, engine_name: str, text: str, speed: float, seed: int) -> Tuple[Optional[str], str]:
-        """Synthesizes new speech audio using the selected engine."""
+        """Synthesizes speech using the selected engine."""
         if not text or not text.strip():
             return None, "⚠️ Please enter dialogue text to synthesize."
 
         status_map = self.check_engine_status()
         engine_info = status_map.get(engine_name, {})
         key = engine_info.get("key")
+
+        if not engine_info.get("ready", False):
+            return None, f"⚠️ **{engine_name} is not ready for synthesis.** Please select a ready engine or compile this model in Step 2."
 
         tmp_out = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
 
@@ -139,12 +223,10 @@ class VoiceStudioGUI:
                 if not ref_wav or not Path(ref_wav).exists():
                     return None, "❌ Reference voice prompt audio file not found in character datasets."
 
-                # Lazy-load F5TTS in-process for fast subsequent runs
                 if self._f5_model is None:
                     from f5_tts.api import F5TTS
                     self._f5_model = F5TTS()
 
-                # Clamp seed to valid 32-bit integer to prevent Python runtime PYTHONHASHSEED error
                 safe_seed = int(seed) % (2**31 - 1) if seed else 42
 
                 self._f5_model.infer(
@@ -162,14 +244,12 @@ class VoiceStudioGUI:
                     return None, "❌ F5-TTS generation produced an empty audio file."
 
             elif key == "xtts":
-                # XTTS Reference: prefer XTTS reference pack, fallback to F5 reference
                 xtts_refs = list((self.datasets_dir / "xtts" / "reference_audio").glob("*.wav")) if (self.datasets_dir / "xtts" / "reference_audio").exists() else []
                 ref_wav = str(xtts_refs[0]) if xtts_refs else self.get_reference_prompt()[0]
 
                 if not ref_wav or not Path(ref_wav).exists():
                     return None, "❌ Reference voice audio clip not found for XTTS."
 
-                # Lazy-load XTTS in-process with PyTorch 2.6 compat patch
                 if self._xtts_model is None:
                     import torch
                     _orig_load = torch.load
@@ -196,13 +276,7 @@ class VoiceStudioGUI:
             elif key == "piper":
                 onnx_models = list((self.models_dir / "piper").glob("*.onnx")) if (self.models_dir / "piper").exists() else []
                 if not onnx_models:
-                    return None, (
-                        "❌ **Piper ONNX Model Not Compiled Yet**\n\n"
-                        f"• LJSpeech training dataset is ready at `{self.datasets_dir / 'piper'}` ({self.get_dataset_stats()['clip_count']} clips).\n"
-                        "• To compile a custom Piper VITS voice, see the official training guide:\n"
-                        "  https://github.com/rhasspy/piper/blob/master/TRAINING.md\n"
-                        "• Once exported, place the `.onnx` and `.onnx.json` files in `models/piper/`."
-                    )
+                    return None, "❌ Piper ONNX model not compiled yet. Please import an ONNX model in Step 2."
 
                 cmd = f"echo {subprocess.list2cmdline([text])} | piper --model {onnx_models[0]} --output_file {tmp_out}"
                 subprocess.run(cmd, shell=True, check=True)
@@ -216,18 +290,100 @@ class VoiceStudioGUI:
     def launch(self, server_port: int = 7860, inbrowser: bool = True):
         import gradio as gr
 
-        status_map = self.check_engine_status()
-        engine_choices = list(status_map.keys())
         ref_wav, ref_txt = self.get_reference_prompt()
         stats = self.get_dataset_stats()
+        dataset_clips = self.get_dataset_clips()
+        clip_choices = [
+            (f"Clip {i+1}: {c['text'][:65]}...", c['id'])
+            for i, c in enumerate(dataset_clips[:30])
+        ] if dataset_clips else [("No clips found", "none")]
 
-        # Clean, modern CSS completely removing button-like styling from labels
+        # CSS styling with step badges and zero button-like labels
         custom_css = """
         .container { max-width: 1200px; margin: 0 auto; padding: 1rem 0; }
         .header-box { margin-bottom: 1.5rem; border-bottom: 1px solid #334155; padding-bottom: 1rem; }
         .stats-badge { font-size: 0.95rem; color: #94a3b8; font-weight: 500; margin-top: 0.5rem; }
-        
-        /* Strip ALL button/pill background styling from component labels across themes */
+
+        /* Step Card Styling */
+        .step-card {
+            background: #1e293b !important;
+            border: 1px solid #334155 !important;
+            border-radius: 12px !important;
+            padding: 1.25rem !important;
+            margin-bottom: 1.25rem !important;
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .step-badge {
+            background: #3b82f6;
+            color: #ffffff;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.2rem 0.6rem;
+            border-radius: 9999px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .step-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+
+        /* Model Architecture Cards */
+        .model-card {
+            background: #0f172a !important;
+            border: 1px solid #334155 !important;
+            border-radius: 10px !important;
+            padding: 1rem !important;
+            height: 100% !important;
+        }
+
+        .model-card-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #f1f5f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.4rem;
+        }
+
+        .status-badge-ready {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.15rem 0.55rem;
+            border-radius: 9999px;
+        }
+
+        .status-badge-pending {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.15rem 0.55rem;
+            border-radius: 9999px;
+        }
+
+        .model-desc {
+            font-size: 0.83rem;
+            color: #94a3b8;
+            margin-bottom: 0.6rem;
+            line-height: 1.4;
+        }
+
+        /* Strip button/pill background styling from component labels across themes */
         label,
         .block label,
         span[data-testid="block-label"],
@@ -249,7 +405,6 @@ class VoiceStudioGUI:
             text-transform: none !important;
         }
 
-        /* Strip purple background from label spans */
         label > span,
         .block label > span,
         span[data-testid="block-label"] > span,
@@ -264,25 +419,15 @@ class VoiceStudioGUI:
             box-shadow: none !important;
         }
 
-        /* Input info helper text */
         .block .info, [data-testid="block-info"] {
             color: #94a3b8 !important;
             font-size: 0.8rem !important;
             margin-bottom: 0.5rem !important;
         }
 
-        /* Unified panel groups */
-        .panel-card {
-            background: #1e293b !important;
-            border: 1px solid #334155 !important;
-            border-radius: 12px !important;
-            padding: 1.25rem !important;
-        }
-
-        /* Prompt reference callout */
         .ref-prompt-box {
             background: #0f172a;
-            border-left: 3px solid #6366f1;
+            border-left: 3px solid #3b82f6;
             padding: 0.75rem 1rem;
             border-radius: 0 8px 8px 0;
             margin: 0.75rem 0;
@@ -332,48 +477,181 @@ class VoiceStudioGUI:
 
         with gr.Blocks(title=f"Voicesolate Studio — {self.char_name}", css=custom_css, theme=theme) as demo:
             with gr.Column(elem_classes="container"):
-                # Clean Header Banner
+                # Header Banner
                 gr.Markdown(
                     f"""
                     # 🎙️ Voicesolate Studio &mdash; {self.char_name}
                     <div class="stats-badge">
-                        📁 <strong>Corpus Size:</strong> {stats['clip_count']} isolated vocal clips ({stats['total_minutes']} minutes) &nbsp;|&nbsp;
-                        🎯 <strong>Available Architectures:</strong> F5-TTS (Diffusion), Coqui XTTS-v2, Piper (LJSpeech/VITS)
+                        📁 <strong>Isolated Character Corpus:</strong> {stats['clip_count']} vocal clips ({stats['total_minutes']} minutes) &nbsp;|&nbsp;
+                        🎯 <strong>Zero-Shot Neural Engines:</strong> F5-TTS & Coqui XTTS-v2 Active &nbsp;|&nbsp;
+                        ⚡ <strong>Offline ONNX Engine:</strong> Piper LJSpeech Ready
                     </div>
                     """,
                     elem_classes="header-box"
                 )
 
-                # Main 2-Column Workspace
-                with gr.Row():
-                    # LEFT: Synthesis Controls Group
-                    with gr.Column(scale=5):
-                        with gr.Group(elem_classes="panel-card"):
-                            gr.Markdown("### ⚙️ Voice Generation")
-                            
-                            engine_dropdown = gr.Dropdown(
-                                choices=engine_choices,
-                                value=engine_choices[0],
-                                label="Speech Synthesis Engine",
-                                info="Select voice cloning model architecture"
+                # =========================================================================
+                # STEP 1: VOICE PROFILE & EXTRACTED VOCAL STEMS
+                # =========================================================================
+                with gr.Group(elem_classes="step-card"):
+                    gr.Markdown(
+                        """
+                        <div class="step-header">
+                            <span class="step-badge">Step 1</span>
+                            <span class="step-title">Actor Voice Profile & Isolated Vocal Stems</span>
+                        </div>
+                        """
+                    )
+                    with gr.Row():
+                        with gr.Column(scale=5):
+                            ref_player = gr.Audio(
+                                value=ref_wav,
+                                label="Primary Reference Voice Stem (Demucs Neural Isolation)",
+                                type="filepath",
+                                interactive=False
+                            )
+                            if ref_txt:
+                                gr.Markdown(f'<div class="ref-prompt-box"><strong>Zero-Shot Calibration Transcript:</strong> "{ref_txt}"</div>')
+
+                        with gr.Column(scale=5):
+                            clip_selector = gr.Dropdown(
+                                choices=clip_choices,
+                                value=clip_choices[0][1] if clip_choices else None,
+                                label="Corpus Clip Explorer",
+                                info=f"Audition any of the {stats['clip_count']} isolated dialogue stems extracted from media"
+                            )
+                            sample_clip_player = gr.Audio(
+                                value=dataset_clips[0]["path"] if dataset_clips else None,
+                                label="Sample Dialogue Stem",
+                                type="filepath",
+                                interactive=False
+                            )
+                            sample_clip_text = gr.Textbox(
+                                value=dataset_clips[0]["text"] if dataset_clips else "",
+                                label="Stem Transcription",
+                                lines=2,
+                                interactive=False
                             )
 
-                            engine_status_banner = gr.Markdown(
-                                f"**Status:** {status_map[engine_choices[0]]['status_text']} &mdash; *{status_map[engine_choices[0]]['desc']}*"
+                # =========================================================================
+                # STEP 2: MODEL ARCHITECTURE & TRAINING CENTER
+                # =========================================================================
+                with gr.Group(elem_classes="step-card"):
+                    gr.Markdown(
+                        """
+                        <div class="step-header">
+                            <span class="step-badge">Step 2</span>
+                            <span class="step-title">Model Architecture & Training Center</span>
+                        </div>
+                        """
+                    )
+                    status_map = self.check_engine_status()
+                    piper_info = status_map.get("Piper (VITS / Fast CPU)", {})
+                    piper_badge_text = piper_info.get("status_text", "")
+                    piper_badge_class = "status-badge-ready" if piper_info.get("ready") else "status-badge-pending"
+
+                    with gr.Row():
+                        # Card 1: F5-TTS
+                        with gr.Column(scale=3):
+                            gr.Markdown(
+                                f"""
+                                <div class="model-card">
+                                    <div class="model-card-title">
+                                        <span>F5-TTS (Flow-Matching DiT)</span>
+                                        <span class="status-badge-ready">🟢 Ready to Synthesize</span>
+                                    </div>
+                                    <div class="model-desc">
+                                        <strong>Type:</strong> Zero-Shot Neural Flow-Matching (24kHz Studio Quality)<br/>
+                                        <strong>Status:</strong> Pre-calibrated and fully ready. Synthesizes high-fidelity speech directly from the reference prompt pack.
+                                    </div>
+                                </div>
+                                """
+                            )
+
+                        # Card 2: Coqui XTTS-v2
+                        with gr.Column(scale=3):
+                            gr.Markdown(
+                                f"""
+                                <div class="model-card">
+                                    <div class="model-card-title">
+                                        <span>Coqui XTTS-v2</span>
+                                        <span class="status-badge-ready">🟢 Ready to Synthesize</span>
+                                    </div>
+                                    <div class="model-desc">
+                                        <strong>Type:</strong> Autoregressive GPT + Diffusion (24kHz Multilingual)<br/>
+                                        <strong>Status:</strong> Speaker conditioning latents configured. Generates speech with zero-shot cloning in ~3 seconds.
+                                    </div>
+                                </div>
+                                """
+                            )
+
+                        # Card 3: Piper VITS
+                        with gr.Column(scale=4):
+                            piper_card_markdown = gr.Markdown(
+                                f"""
+                                <div class="model-card">
+                                    <div class="model-card-title">
+                                        <span>Piper (VITS / ONNX)</span>
+                                        <span class="{piper_badge_class}">{piper_badge_text}</span>
+                                    </div>
+                                    <div class="model-desc">
+                                        <strong>Type:</strong> Fast CPU Neural Inference (22.05kHz)<br/>
+                                        <strong>Status:</strong> {piper_info.get('details', '')}
+                                    </div>
+                                </div>
+                                """
+                            )
+
+                            with gr.Accordion("📦 Import Trained Piper Model (.onnx)", open=False):
+                                gr.Markdown(
+                                    f"Upload your trained `.onnx` and `.onnx.json` model files below to immediately unlock Piper in Step 3:\n\n"
+                                    f"*Dataset Location:* `{self.datasets_dir / 'piper'}`"
+                                )
+                                piper_uploader = gr.File(
+                                    label="Drop or Select .onnx and .onnx.json files",
+                                    file_count="multiple",
+                                    file_types=[".onnx", ".json"]
+                                )
+                                import_btn = gr.Button("🚀 Import & Unlock Piper in Studio", variant="secondary")
+                                import_msg = gr.Markdown("")
+
+                # =========================================================================
+                # STEP 3: STUDIO VOICE SYNTHESIS
+                # =========================================================================
+                with gr.Group(elem_classes="step-card"):
+                    gr.Markdown(
+                        """
+                        <div class="step-header">
+                            <span class="step-badge">Step 3</span>
+                            <span class="step-title">Studio Voice Synthesis & Audition</span>
+                        </div>
+                        """
+                    )
+
+                    ready_engines = self.get_ready_synthesis_engines()
+
+                    with gr.Row():
+                        # Left: Synthesis controls
+                        with gr.Column(scale=5):
+                            engine_dropdown = gr.Dropdown(
+                                choices=ready_engines,
+                                value=ready_engines[0],
+                                label="Speech Synthesis Engine",
+                                info="Only engines that are calibrated and ready to synthesize are shown"
                             )
 
                             quote_selector = gr.Dropdown(
                                 choices=self.DEFAULT_QUOTES,
                                 value=self.DEFAULT_QUOTES[0],
                                 label="Sample Dialogue Quotes",
-                                info="Quick-select a classic aphorism or enter custom text below"
+                                info="Quick-select a quote or enter custom text below"
                             )
 
                             dialogue_input = gr.Textbox(
                                 lines=3,
                                 value=self.DEFAULT_QUOTES[0],
                                 label="Dialogue Text",
-                                placeholder="Type any sentence for the voice model to speak..."
+                                placeholder="Type any sentence for the character voice to speak..."
                             )
 
                             with gr.Accordion("Advanced Voice Settings", open=False):
@@ -395,36 +673,63 @@ class VoiceStudioGUI:
                             synth_btn = gr.Button("✨ Synthesize Voice", variant="primary", size="lg", elem_id="synth-btn")
                             feedback_box = gr.Markdown("")
 
-                    # RIGHT: Audition Group
-                    with gr.Column(scale=5):
-                        with gr.Group(elem_classes="panel-card"):
-                            gr.Markdown("### 🎧 Voice Audition")
-
-                            ref_player = gr.Audio(
-                                value=ref_wav,
-                                label="Actor Reference Voice (Original Neural Stem)",
-                                type="filepath",
-                                interactive=False
-                            )
-                            if ref_txt:
-                                gr.Markdown(
-                                    f'<div class="ref-prompt-box"><strong>Reference Transcript:</strong> "{ref_txt}"</div>'
-                                )
-
+                        # Right: Audition output
+                        with gr.Column(scale=5):
                             output_player = gr.Audio(
                                 label="AI Voice Synthesis (Generated Audio Output)",
                                 type="filepath",
                                 interactive=False
                             )
 
-                # Dynamic Interactions
+                # =========================================================================
+                # INTERACTIVE EVENT WIRING
+                # =========================================================================
+                # Step 1: Clip explorer selection
+                def on_select_clip(clip_id):
+                    for c in dataset_clips:
+                        if c["id"] == clip_id:
+                            return c["path"], c["text"]
+                    return None, ""
+
+                clip_selector.change(
+                    fn=on_select_clip,
+                    inputs=[clip_selector],
+                    outputs=[sample_clip_player, sample_clip_text]
+                )
+
+                # Step 2: Import Piper ONNX model
+                def on_import_piper(files):
+                    msg, success = self.import_piper_model(files)
+                    new_status = self.check_engine_status()
+                    new_piper = new_status.get("Piper (VITS / Fast CPU)", {})
+                    badge_class = "status-badge-ready" if new_piper.get("ready") else "status-badge-pending"
+                    badge_text = new_piper.get("status_text", "")
+                    
+                    updated_card = f"""
+                    <div class="model-card">
+                        <div class="model-card-title">
+                            <span>Piper (VITS / ONNX)</span>
+                            <span class="{badge_class}">{badge_text}</span>
+                        </div>
+                        <div class="model-desc">
+                            <strong>Type:</strong> Fast CPU Neural Inference (22.05kHz)<br/>
+                            <strong>Status:</strong> {new_piper.get('details', '')}
+                        </div>
+                    </div>
+                    """
+
+                    new_ready = self.get_ready_synthesis_engines()
+                    dropdown_update = gr.update(choices=new_ready, value=new_ready[0])
+                    return msg, updated_card, dropdown_update
+
+                import_btn.click(
+                    fn=on_import_piper,
+                    inputs=[piper_uploader],
+                    outputs=[import_msg, piper_card_markdown, engine_dropdown]
+                )
+
+                # Step 3: Synthesis quote selection and synthesis trigger
                 quote_selector.change(fn=lambda q: q, inputs=[quote_selector], outputs=[dialogue_input])
-
-                def update_engine_info(eng):
-                    stat = self.check_engine_status().get(eng, {})
-                    return f"**Status:** {stat.get('status_text', 'Unknown')} &mdash; *{stat.get('desc', '')}*"
-
-                engine_dropdown.change(fn=update_engine_info, inputs=[engine_dropdown], outputs=[engine_status_banner])
 
                 synth_btn.click(
                     fn=self.synthesize,

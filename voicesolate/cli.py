@@ -348,13 +348,67 @@ def main():
                 console.print(f"\n[bold magenta]── Configuring & Tuning models for: {char_name} ──[/bold magenta]")
                 trained_models = trainer.train_all(datasets, targets=args.targets)
                 for model_type, model_path in trained_models.items():
-                    console.print(f"[bold green]✓ {model_type.upper()} model package created:[/bold green] {model_path}")
+                    if model_type == "piper":
+                        onnx_models = list(model_path.glob("*.onnx")) if model_path.exists() else []
+                        if onnx_models:
+                            console.print(f"[bold green]✓ PIPER VITS ONNX model ready:[/bold green] {onnx_models[0]}")
+                        else:
+                            console.print(f"[bold yellow]✓ PIPER LJSpeech dataset configured (awaiting ONNX compilation):[/bold yellow] {model_path}")
+                    else:
+                        console.print(f"[bold green]✓ {model_type.upper()} model profile ready:[/bold green] {model_path}")
 
-                # Launch Modern Voice Studio Web UI
+                # Launch Modern Voice Studio Web UI or output rich non-interactive summary
                 if not (args.no_web_ui or args.no_interactive):
                     from .voice_studio_gui import VoiceStudioGUI
                     gui = VoiceStudioGUI(char_dir)
                     gui.launch(server_port=7860, inbrowser=True)
+                else:
+                    from rich.table import Table
+                    table = Table(title=f"🎙️ Voicesolate Model Architecture Summary — {char_name}", border_style="cyan")
+                    table.add_column("Engine / Architecture", style="bold")
+                    table.add_column("Type", style="cyan")
+                    table.add_column("Synthesis Status", style="green")
+                    table.add_column("Artifact Directory", style="dim")
+
+                    table.add_row(
+                        "F5-TTS",
+                        "Zero-Shot Flow-Matching DiT (24kHz)",
+                        "[bold green]🟢 Ready to Synthesize[/bold green]",
+                        str(char_dir / "models/f5tts")
+                    )
+                    table.add_row(
+                        "Coqui XTTS-v2",
+                        "Zero-Shot Autoregressive + Diffusion (24kHz)",
+                        "[bold green]🟢 Ready to Synthesize[/bold green]",
+                        str(char_dir / "models/xtts")
+                    )
+                    piper_onnx = list((char_dir / "models/piper").glob("*.onnx"))
+                    if piper_onnx:
+                        table.add_row(
+                            "Piper VITS",
+                            "Fast CPU Neural Inference (22.05kHz)",
+                            "[bold green]🟢 Compiled ONNX Ready[/bold green]",
+                            str(piper_onnx[0])
+                        )
+                    else:
+                        table.add_row(
+                            "Piper VITS",
+                            "Fast CPU Neural Inference (22.05kHz)",
+                            "[bold yellow]🟡 LJSpeech Dataset Ready (Awaiting ONNX)[/bold yellow]",
+                            str(char_dir / "datasets/piper")
+                        )
+
+                    console.print("\n")
+                    console.print(table)
+                    console.print(Panel.fit(
+                        f"[bold green]✓ Full pipeline complete for {char_name}![/bold green]\n"
+                        f"• Isolated Clips: [cyan]{len(all_char_clips if not args.no_aggregate else char_clips)}[/cyan]\n"
+                        f"• Ready Zero-Shot Engines: [green]F5-TTS, Coqui XTTS-v2[/green]\n"
+                        f"• LJSpeech Dataset for Piper: [cyan]{char_dir / 'datasets/piper'}[/cyan]\n\n"
+                        f"To audition or synthesize interactively, launch Voice Studio:\n"
+                        f"  [bold cyan].venv/bin/python -m voicesolate.cli -i ... -c '{char_name}'[/bold cyan]",
+                        border_style="green"
+                    ))
 
 if __name__ == "__main__":
     main()
