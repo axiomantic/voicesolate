@@ -25,6 +25,7 @@ class AudioExtractor:
         self.remote_user: Optional[str] = ssh_user
         self.remote_file_path: Optional[str] = None
         self.local_path: Optional[Path] = None
+        self._cached_duration: Optional[float] = None
 
         self._parse_path(media_path)
 
@@ -86,6 +87,8 @@ class AudioExtractor:
 
     def get_duration(self) -> float:
         """Returns total media duration in seconds using ffprobe without transferring media."""
+        if self._cached_duration is not None and self._cached_duration > 0:
+            return self._cached_duration
         target = self.remote_file_path if self.is_remote else str(self.local_path)
         cmd = [
             "ffprobe",
@@ -95,7 +98,8 @@ class AudioExtractor:
             target
         ]
         out = self._run_cmd(cmd)
-        return float(out.decode("utf-8").strip())
+        self._cached_duration = float(out.decode("utf-8").strip())
+        return self._cached_duration
 
     def extract_embedded_subtitles(self, output_srt_path: str) -> bool:
         """Extracts internal subtitles from local or remote video directly."""
@@ -132,15 +136,14 @@ class AudioExtractor:
         """Alias for extract_embedded_subtitles."""
         return self.extract_embedded_subtitles(output_srt_path)
 
-    def extract_slice(self, start_sec: float, duration_or_end_sec: float, output_path: str):
+    def extract_slice(self, start_sec: float, duration_sec: float, output_path: str, end_sec: Optional[float] = None):
         """
         Extracts an audio slice directly to an output wav file.
-        Accepts duration_sec (if < start_sec) or end_sec (if > start_sec).
+        Uses start_sec and duration_sec (or end_sec if explicitly provided).
         """
-        if duration_or_end_sec > start_sec:
-            return self.export_clip(start_sec, duration_or_end_sec, output_path)
-        else:
-            return self.export_clip(start_sec, start_sec + duration_or_end_sec, output_path)
+        if end_sec is not None and end_sec > start_sec:
+            return self.export_clip(start_sec, end_sec, output_path)
+        return self.export_clip(start_sec, start_sec + max(0.1, duration_sec), output_path)
 
     def extract_slice_pcm(self, start_sec: float, duration_sec: float, sample_rate: int = 16000) -> bytes:
         """Fast partial chunk extraction (16kHz mono) for Wyoming STT probing."""

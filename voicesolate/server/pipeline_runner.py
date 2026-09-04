@@ -256,7 +256,6 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
 
         # Process per character
         enhancer = AudioEnhancer(cache_manager=cache_manager) if do_enhance else None
-        dataset_builder = DatasetBuilder(output_base_dir)
         processed_manifest_clips = []
 
         total_steps = len(target_chars) * len(aligned_clips)
@@ -360,12 +359,22 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                 job_manager.notify_clip_discovered(job_id, clip_dict)
 
             # Build datasets
-            job_manager.update_job(job_id, progress=85.0, stage="dataset", message=f"Building dataset packs for {char_name}...")
-            all_char_clips = char_clips
+            builder = DatasetBuilder(char_dir)
+            this_char_clips = [c for c in processed_manifest_clips if c.get("character", "").upper() == char_name.upper()]
             if not no_aggregate:
-                all_char_clips = dataset_builder.aggregate_character_clips(char_name, Path("./output").resolve())
+                all_char_clips = builder.aggregate_all_clips_for_character(
+                    char_name, output_base_dir.parent, current_clips=this_char_clips
+                )
+            else:
+                all_char_clips = this_char_clips
 
-            datasets = dataset_builder.build_all(char_name, all_char_clips, targets=targets)
+            job_manager.update_job(
+                job_id,
+                progress=85.0,
+                stage="dataset",
+                message=f"Building dataset packs for {char_name} ({len(all_char_clips)} clips)..."
+            )
+            datasets = builder.build_all(all_char_clips, targets=targets, aggregate_all=False)
 
             # Train / Configure Models
             if not no_train:

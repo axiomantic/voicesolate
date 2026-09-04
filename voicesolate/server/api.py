@@ -105,21 +105,30 @@ def get_system_status():
 def _find_character_dir(character_name: Optional[str], episode: Optional[str] = None) -> Optional[Path]:
     if not character_name:
         return None
+    char_clean = character_name.strip().lower()
+
+    if episode:
+        ep_dir = _find_episode_dir(episode)
+        if ep_dir and ep_dir.exists():
+            cand = ep_dir / character_name
+            if cand.exists():
+                return cand
+            for child in ep_dir.iterdir():
+                if child.is_dir() and child.name.lower() == char_clean:
+                    return child
+
+    # If episode not specified or not found in specified episode, search across all output roots
     for out_root in [Path("./output"), Path("./output2")]:
         if not out_root.exists():
             continue
-        if episode:
-            ep_dir = _find_episode_dir(episode)
-            if ep_dir:
-                cand = ep_dir / character_name
+        for ep in sorted(out_root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+            if ep.is_dir() and not ep.name.startswith("."):
+                cand = ep / character_name
                 if cand.exists():
                     return cand
-            return None
-
-        # Episode not specified: pick most recent matching episode
-        for ep in sorted(out_root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-            if ep.is_dir() and not ep.name.startswith(".") and (ep / character_name).exists():
-                return ep / character_name
+                for child in ep.iterdir():
+                    if child.is_dir() and child.name.lower() == char_clean:
+                        return child
     return None
 
 @app.get("/api/v1/system/engines")

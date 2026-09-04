@@ -152,7 +152,7 @@ class AudioEnhancer:
             if res.returncode != 0:
                 # Fallback: copy with soundfile if FFmpeg filter chain choked
                 data, sr = sf.read(input_wav)
-                sf.write(output_wav, data, 48000, subtype="PCM_24")
+                sf.write(output_wav, data, sr, subtype="PCM_24")
         except Exception:
             data, sr = sf.read(input_wav)
-            sf.write(output_wav, data, 48000, subtype="PCM_24")
+            sf.write(output_wav, data, sr, subtype="PCM_24")

@@ -381,7 +381,7 @@ class EngineService:
         return {
             "synth_id": synth_id,
             "file_path": str(out_wav),
-            "url": f"/api/v1/audio/stream?path={out_wav}",
+            "url": f"/api/v1/audio/stream?path={urllib.parse.quote(str(out_wav.resolve()))}",
             "duration": round(info.duration, 2),
             "samplerate": info.samplerate,
             "engine": engine_id,

@@ -124,6 +124,9 @@ class DatasetBuilder:
 
         return all_clips
 
+    # Aliases for backwards compatibility and ergonomic pipeline invocation
+    aggregate_character_clips = aggregate_all_clips_for_character
+
     def build_piper_ljspeech(self, clips: List[Dict[str, Any]]) -> Path:
         """
         Builds LJSpeech-compatible dataset for Piper VITS training.
@@ -271,11 +274,36 @@ class DatasetBuilder:
 
         return f5_dir
 
-    def build_all(self, clips: List[Dict[str, Any]], targets: Optional[List[str]] = None, aggregate_all: bool = True) -> Dict[str, Path]:
+    def build_all(self, *args, **kwargs) -> Dict[str, Path]:
         """
         Builds all requested target datasets.
-        If aggregate_all is True, merges clips across all episodes for this character.
+        Accepts:
+          build_all(clips, targets=None, aggregate_all=True)
+          OR
+          build_all(char_name, clips, targets=None, aggregate_all=True)
         """
+        # Polymorphic argument resolution
+        clips = []
+        targets = kwargs.get("targets", None)
+        aggregate_all = kwargs.get("aggregate_all", True)
+
+        if len(args) >= 2 and isinstance(args[0], str):
+            # Form: build_all(char_name, clips, ...)
+            clips = args[1]
+            if len(args) >= 3 and targets is None:
+                targets = args[2]
+            if len(args) >= 4 and "aggregate_all" not in kwargs:
+                aggregate_all = args[3]
+        elif len(args) >= 1:
+            # Form: build_all(clips, ...)
+            clips = args[0]
+            if len(args) >= 2 and targets is None:
+                targets = args[1]
+            if len(args) >= 3 and "aggregate_all" not in kwargs:
+                aggregate_all = args[2]
+        else:
+            clips = kwargs.get("clips", [])
+
         final_clips = clips
         if aggregate_all:
             output_root = self.char_dir.parent.parent
