@@ -21,11 +21,32 @@ from .model_trainer import ModelTrainer
 
 console = Console()
 
+def start_studio_server(host: str = "127.0.0.1", port: int = 7860, open_browser: bool = True):
+    """Starts the FastAPI web backend and opens the modern studio in the default browser."""
+    import uvicorn
+    import webbrowser
+    import threading
+
+    url = f"http://{host}:{port}"
+    console.print(Panel.fit(
+        f"[bold cyan]🎙️ Voicesolate Studio Web Server Online[/bold cyan]\n\n"
+        f"• [green]Studio URL:[/green] [bold white underline]{url}[/bold white underline]\n"
+        f"• [cyan]Real-Time Radar:[/cyan] WebSocket pipeline telemetry active\n"
+        f"• [dim]Press Ctrl+C in terminal to stop server[/dim]",
+        border_style="cyan"
+    ))
+
+    if open_browser:
+        threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+
+    from .server.api import app
+    uvicorn.run(app, host=host, port=port, log_level="warning")
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Extract, enhance, format datasets, and train/tune TTS voice models (Piper, XTTS, F5-TTS)."
     )
-    parser.add_argument("-i", "--input", required=True, help="Path to input video or audio file (e.g. episode.mkv)")
+    parser.add_argument("-i", "--input", default=None, help="Path to input video or audio file (e.g. episode.mkv)")
     parser.add_argument("-s", "--script", default=None, help="Script path (.txt, .json, .srt), URL, or episode ID")
     parser.add_argument("--provider", default=None, help="Optional script provider (e.g. 'startrek')")
     parser.add_argument("-o", "--output-dir", default="./output", help="Directory where character audio clips will be saved")
@@ -36,6 +57,9 @@ def parse_args():
     parser.add_argument("--targets", nargs="+", default=["all"], help="Target model formats to prepare & train: 'all', 'piper', 'xtts', 'f5' (default: all)")
     parser.add_argument("--no-train", action="store_true", help="Prepare datasets only; skip model training / packaging")
     parser.add_argument("--no-web-ui", action="store_true", help="Do not launch Voice Studio Web UI at the end")
+    parser.add_argument("--web", action="store_true", help="Immediately launch Voice Studio Web UI")
+    parser.add_argument("--host", default="127.0.0.1", help="Studio Web UI host (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=7860, help="Studio Web UI port (default: 7860)")
     parser.add_argument("--no-interactive", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--no-enhance", action="store_true", help="Skip ML vocal isolation and super-resolution enhancement")
     parser.add_argument("--theme", default="ocean", choices=["ocean", "soft", "monochrome", "citrus", "glass", "default"], help="Gradio UI theme / skin (default: ocean)")
@@ -75,6 +99,12 @@ def check_system_dependencies():
 def main():
     check_system_dependencies()
     args = parse_args()
+
+    # If no input provided or --web requested, launch studio immediately (<1s)
+    if args.web or not args.input:
+        start_studio_server(host=args.host, port=args.port, open_browser=True)
+        return
+
     input_str = args.input.strip()
     
     # Initialize Audio Extractor (handles local or remote SFTP/SSH)
@@ -359,9 +389,7 @@ def main():
 
                 # Launch Modern Voice Studio Web UI or output rich non-interactive summary
                 if not (args.no_web_ui or args.no_interactive):
-                    from .voice_studio_gui import VoiceStudioGUI
-                    gui = VoiceStudioGUI(char_dir)
-                    gui.launch(server_port=7860, inbrowser=True, theme=args.theme)
+                    start_studio_server(host=args.host, port=args.port, open_browser=True)
                 else:
                     from rich.table import Table
                     table = Table(title=f"🎙️ Voicesolate Model Architecture Summary — {char_name}", border_style="cyan")

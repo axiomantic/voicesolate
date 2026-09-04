@@ -1,7 +1,7 @@
 import os
 import re
 import time
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from dataclasses import dataclass, asdict
 from rapidfuzz import fuzz
 from rich.progress import Progress
@@ -95,7 +95,8 @@ class SearchAligner:
         subtitles_path: Optional[str] = None,
         script_id: str = "default",
         similarity_threshold: float = 55.0,
-        progress: Optional[Progress] = None
+        progress: Optional[Progress] = None,
+        callback: Optional[Any] = None
     ) -> List[AlignedClip]:
         """
         Whole-Span Monotonic Levenshtein Alignment across Subtitles & Audio.
@@ -173,6 +174,18 @@ class SearchAligner:
                 if best_score >= similarity_threshold:
                     break
 
+            if callback and anchors and last_anchor_idx < len(anchors):
+                est_start = anchors[min(last_anchor_idx, len(anchors)-1)].start_sec
+                callback({
+                    "type": "worker_scan",
+                    "start_sec": est_start,
+                    "end_sec": min(self.duration, est_start + 15.0),
+                    "target_text": target_text,
+                    "character": target.character,
+                    "index": line_idx,
+                    "total": len(target_lines)
+                })
+
             if best_start is not None and best_score >= similarity_threshold:
                 raw_start = anchors[best_start].start_sec
                 raw_end = anchors[best_end].end_sec
@@ -186,14 +199,25 @@ class SearchAligner:
                 )
 
                 timecode = f"{self.format_timecode(refined_start)}-{self.format_timecode(refined_end)}"
-                aligned_clips.append(AlignedClip(
+                clip_obj = AlignedClip(
                     character=target.character,
                     text=target.text,
                     start_sec=refined_start,
                     end_sec=refined_end,
                     confidence=conf,
                     timecode_str=timecode
-                ))
+                )
+                aligned_clips.append(clip_obj)
+
+                if callback:
+                    callback({
+                        "type": "clip_matched",
+                        "start_sec": refined_start,
+                        "end_sec": refined_end,
+                        "confidence": conf,
+                        "character": target.character,
+                        "text": target.text
+                    })
 
             if progress and task_id is not None:
                 progress.advance(task_id, 1)
@@ -205,6 +229,8 @@ class SearchAligner:
                 self.cache.save_alignment_cache(self.media_key, char, script_id, char_clips)
 
         return aligned_clips
+
+    align_character_dialogue = align_character_lines
 
     def _refine_boundaries_with_stt(
         self,

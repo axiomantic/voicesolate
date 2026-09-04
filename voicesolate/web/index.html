@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voicesolate Studio — Neural Vocal Isolation & Voice Synthesis</title>
+  <link rel="stylesheet" href="/static/css/studio.css">
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header class="top-header">
+    <div class="brand-group">
+      <div class="brand-logo">
+        <span>🎙️</span>
+        <span>Voicesolate Studio</span>
+      </div>
+      <span class="brand-badge">PRO STUDIO</span>
+    </div>
+
+    <div class="header-status-group">
+      <div class="status-pill" id="systemAccelPill">
+        ⚡ <span>Detecting Acceleration...</span>
+      </div>
+
+      <div class="status-pill">
+        <span class="pulse-dot" id="wsPulseDot"></span>
+        <span id="wsStatusText">Connecting...</span>
+      </div>
+
+      <!-- Episode & Character Selectors -->
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label for="headerEpisodeSelect" style="font-size:12px; color:var(--text-dim);">Episode:</label>
+        <select id="headerEpisodeSelect" class="selector-select">
+          <option value="">Loading episodes...</option>
+        </select>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label for="headerCharacterSelect" style="font-size:12px; color:var(--text-dim);">Character:</label>
+        <select id="headerCharacterSelect" class="selector-select">
+          <option value="">Select character...</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <!-- Stage Navigation Tabs -->
+  <nav class="tabs-nav">
+    <button class="tab-btn active" data-tab="tab-studio">
+      <span>🎙️</span>
+      <span>Voice Studio</span>
+    </button>
+    <button class="tab-btn" data-tab="tab-radar">
+      <span>🌊</span>
+      <span>Audio Radar &amp; Waveform</span>
+    </button>
+    <button class="tab-btn" data-tab="tab-engines">
+      <span>🧬</span>
+      <span>Datasets &amp; Engines</span>
+    </button>
+    <button class="tab-btn" data-tab="tab-pipeline">
+      <span>🛰️</span>
+      <span>Pipeline &amp; Ingestion</span>
+    </button>
+  </nav>
+
+  <!-- Active Job Progress Banner -->
+  <div class="main-content" style="padding-bottom: 0;">
+    <div class="job-banner" id="activeJobBanner">
+      <div class="job-header-row">
+        <div class="job-title">
+          <span>⚡</span>
+          <span id="jobTitleText">Executing background pipeline operation...</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span id="jobPercentText" style="font-weight:600; font-family:var(--font-mono);">0%</span>
+          <button class="btn btn-danger btn-sm" id="cancelJobBtn">Cancel</button>
+        </div>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="jobProgressFill"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content Areas -->
+  <main class="main-content">
+
+    <!-- TAB 1: VOICE STUDIO -->
+    <section id="tab-studio" class="tab-pane active">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">🎙️ Creative Synthesis Studio</h2>
+            <p class="card-subtitle">Zero-shot neural flow-matching &amp; comparative reference auditioning</p>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:24px;">
+          <!-- Left: Synthesis Controls -->
+          <div style="display:flex; flex-direction:column; gap:18px;">
+            <div class="form-group">
+              <label class="form-label" for="studioEngineSelect">Voice Synthesis Architecture</label>
+              <select id="studioEngineSelect" class="form-select">
+                <option value="f5-tts">F5-TTS (Diffusion Flow-Matching — 24kHz)</option>
+                <option value="xtts-v2">Coqui XTTS-v2 (Autoregressive Latents — 24kHz)</option>
+                <option value="piper">Piper VITS (Fast CPU Neural ONNX — 22.05kHz)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="studioQuoteSelect">Sample Dialogue Preset</label>
+              <select id="studioQuoteSelect" class="form-select">
+                <option value="">-- Quick-select character quote --</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="studioDialogueText">Dialogue Text to Synthesize</label>
+              <textarea id="studioDialogueText" class="form-textarea" placeholder="Enter dialogue for the character to speak..."></textarea>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+              <div class="form-group">
+                <div style="display:flex; justify-content:space-between;">
+                  <label class="form-label" for="studioSpeedRange">Speech Cadence / Speed</label>
+                  <span id="studioSpeedValue" style="font-size:12px; font-family:var(--font-mono); color:var(--accent-cyan);">1.00x</span>
+                </div>
+                <input type="range" id="studioSpeedRange" min="0.6" max="1.6" step="0.05" value="1.0" style="accent-color:var(--accent-cyan);">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="studioSeedInput">Random Seed</label>
+                <input type="number" id="studioSeedInput" class="form-input" value="42">
+              </div>
+            </div>
+
+            <button class="btn btn-primary" id="studioSynthesizeBtn" style="padding:14px; font-size:15px; margin-top:8px;">
+              <span>🎙️</span>
+              <span>Generate AI Voice</span>
+            </button>
+          </div>
+
+          <!-- Right: Side-by-Side Comparator -->
+          <div style="display:flex; flex-direction:column; gap:18px;">
+            <!-- Reference Audio Card -->
+            <div class="audio-player-card">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:600; font-size:13px; color:#fff;">🎧 Actor Reference Voice (Original Neural Stem)</span>
+                <span id="studioRefLabel" style="font-size:11px; color:var(--text-dim); font-family:var(--font-mono);"></span>
+              </div>
+              <audio id="studioRefAudio" controls></audio>
+            </div>
+
+            <!-- AI Synthesized Output Card -->
+            <div class="audio-player-card" style="border-color:var(--accent-cyan); background:rgba(6, 182, 212, 0.04);">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:600; font-size:13px; color:var(--accent-cyan);">✨ AI Voice Output (Generated Speech)</span>
+                <span id="studioGeneratedMeta" style="font-size:11px; color:var(--text-dim); font-family:var(--font-mono);">Awaiting generation</span>
+              </div>
+              <audio id="studioGeneratedAudio" controls></audio>
+            </div>
+
+            <div style="background:var(--bg-surface-elevated); border:1px solid var(--border-subtle); border-radius:8px; padding:14px; font-size:13px; color:var(--text-muted); line-height:1.5;">
+              <strong style="color:#fff;">💡 Direct Comparison:</strong> Play the actor's original discrete stem above, then hit Generate to hear the synthesized voice clone side-by-side. The neural models clone the timbre, resonance, and cadence directly.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: AUDIO RADAR & WAVEFORM -->
+    <section id="tab-radar" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">🌊 Divide-and-Conquer Audio Radar</h2>
+            <p class="card-subtitle">Macro-representation of entire media file, parallel STT search sweeps &amp; dialogue bounds</p>
+          </div>
+          <div style="display:flex; align-items:center; gap:16px;">
+            <span style="font-family:var(--font-mono); font-size:13px; color:var(--accent-cyan);" id="radarCursorTime">0:00.00</span>
+            <span style="font-size:13px; color:var(--text-muted);" id="radarDurationText">0:00</span>
+            <span class="badge badge-ready" id="radarClipsCount">0 clips</span>
+          </div>
+        </div>
+
+        <div class="radar-container">
+          <div class="canvas-wrapper">
+            <canvas id="macroWaveformCanvas"></canvas>
+          </div>
+
+          <!-- Active Search Workers Grid -->
+          <div>
+            <h4 style="font-size:13px; color:var(--text-muted); margin-bottom:10px; text-transform:uppercase; letter-spacing:0.5px;">
+              Active Search Workers &amp; Segment Hunters
+            </h4>
+            <div class="radar-workers-grid" id="radarWorkersContainer">
+              <div class="worker-card">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-weight:600;">worker-stt-1</span>
+                  <span class="worker-badge matched">Standby</span>
+                </div>
+                <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);">Whisper Word-Timestamp Radar</div>
+                <div style="font-size:12px; color:var(--text-muted);">Indexed and ready for alignment sweeps.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Clip Inspector Panel (opens when clip on radar clicked) -->
+          <div class="clip-inspector" id="clipInspectorPanel" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <h3 style="font-size:16px; color:#fff;" id="inspectorCharName">CLEMENS</h3>
+                <span style="font-size:12px; color:var(--text-dim); font-family:var(--font-mono);" id="inspectorTimecode"></span>
+              </div>
+              <span class="badge badge-ready" id="inspectorConfidenceBadge">98% Match</span>
+            </div>
+
+            <p style="font-size:14px; color:var(--text-main); font-style:italic;" id="inspectorText"></p>
+
+            <div class="audition-grid">
+              <div class="audio-player-card">
+                <span style="font-size:12px; font-weight:600; color:var(--accent-indigo);">1. Raw Center Channel (FC Discrete Stem)</span>
+                <audio id="inspectorRawAudio" controls></audio>
+              </div>
+              <div class="audio-player-card" style="border-color:var(--accent-emerald);">
+                <span style="font-size:12px; font-weight:600; color:var(--accent-emerald);">2. Demucs v4 Neural Vocal Stem (Isolated)</span>
+                <audio id="inspectorEnhAudio" controls></audio>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: DATASETS & ENGINES -->
+    <section id="tab-engines" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">🧬 Character Dataset &amp; Engine Hub</h2>
+            <p class="card-subtitle" id="datasetStatsHeader">Corpus health and model readiness</p>
+          </div>
+        </div>
+
+        <div class="engines-grid" id="enginesGridContainer">
+          <!-- Populated dynamically by app.js -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: PIPELINE & INGESTION -->
+    <section id="tab-pipeline" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">🛰️ Ingestion &amp; Dialogue Mining</h2>
+            <p class="card-subtitle">Scan local media, remote SSH/SFTP episodes, extract subtitles, and hunt dialogue</p>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label class="form-label" for="pipelineInputPath">Media File or Remote SFTP Source</label>
+            <input type="text" id="pipelineInputPath" class="form-input" placeholder="/path/to/episode.mkv or sftp://user@host/path/to/video.mkv" value="/mnt/storage/media/Star_Trek_The_Next_Generation_S06E01_Times_Arrow_Part_2_1080.mkv">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="pipelineScriptPath">Script Path or Episode Identifier</label>
+            <input type="text" id="pipelineScriptPath" class="form-input" placeholder="e.g. s06e01 or local script file" value="s06e01">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="pipelineProviderSelect">Script Provider</label>
+            <select id="pipelineProviderSelect" class="form-select">
+              <option value="startrek">Star Trek Script Archive (Automatic)</option>
+              <option value="generic">Generic SRT / Subtitle Only</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="pipelineCharInput">Target Character</label>
+            <input type="text" id="pipelineCharInput" class="form-input" placeholder="e.g. CLEMENS, PICARD, DATA" value="CLEMENS">
+          </div>
+        </div>
+
+        <div style="display:flex; gap:14px; margin-top:20px;">
+          <button class="btn btn-secondary" id="pipelineScanBtn">
+            <span>🔍</span>
+            <span>Scan &amp; Discover Characters</span>
+          </button>
+          <button class="btn btn-primary" id="pipelineExtractBtn">
+            <span>⚡</span>
+            <span>Run Full Extraction &amp; Neural Isolation</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
