@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from pydantic import BaseModel
 
 from .job_manager import job_manager
-from .engine_service import engine_service
+from .engine_service import engine_service, resolve_engine_meta, ENGINE_SPECS
 from .pipeline_runner import run_scan_job, run_pipeline_job
 from ..waveform import generate_macro_waveform_from_manifest, extract_peaks_from_wav, generate_macro_waveform_for_media
 from ..script_parser import ScriptParser
@@ -426,17 +426,46 @@ def get_character_details(character_name: str, episode: Optional[str] = None):
     cached_synths = []
     synth_cache_dir = Path("cache/synthesized").resolve()
     if synth_cache_dir.exists():
-        for w in sorted(synth_cache_dir.glob("*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)[:6]:
+        for w in sorted(synth_cache_dir.glob("*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)[:10]:
             try:
                 import urllib.parse
                 import soundfile as sf
+                sidecar_json = w.with_suffix(".json")
+                sidecar_data = {}
+                if sidecar_json.exists():
+                    try:
+                        with open(sidecar_json, "r", encoding="utf-8") as jf:
+                            sidecar_data = json.load(jf)
+                    except Exception:
+                        pass
+
+                # Check character association if present
+                item_char = sidecar_data.get("character")
+                w_lower = w.name.lower()
+                char_lower = character_name.lower()
+                if item_char and item_char.lower() != char_lower:
+                    continue
+                if not item_char and any(known in w_lower for known in ["clemens", "picard", "riker", "data"]) and char_lower not in w_lower:
+                    continue
+
                 info = sf.info(str(w))
+                engine_hint = sidecar_data.get("engine") or w.stem
+                eng_meta = resolve_engine_meta(engine_hint, samplerate=info.samplerate)
+
                 cached_synths.append({
+                    "synth_id": sidecar_data.get("synth_id", w.stem),
                     "file_path": str(w),
                     "url": f"/api/v1/audio/stream?path={urllib.parse.quote(str(w.resolve()))}",
                     "filename": w.name,
                     "duration": round(info.duration, 2),
-                    "samplerate": info.samplerate
+                    "samplerate": info.samplerate,
+                    "engine": sidecar_data.get("engine") or eng_meta["id"],
+                    "engine_display": sidecar_data.get("engine_display") or eng_meta["display"],
+                    "model_name": sidecar_data.get("model_name") or eng_meta["name"],
+                    "model_architecture": sidecar_data.get("model_architecture") or eng_meta["architecture"],
+                    "model_badge": sidecar_data.get("model_badge") or eng_meta["badge"],
+                    "text": sidecar_data.get("text", ""),
+                    "created_at": sidecar_data.get("created_at", w.stat().st_mtime)
                 })
             except Exception:
                 pass
@@ -536,7 +565,16 @@ def synthesize_batch(req: BatchSynthesizeRequest):
             results[eng] = {"status": "success", **res}
         except Exception as e:
             logger.warning(f"Synthesis error for {eng}: {e}")
-            results[eng] = {"status": "error", "error": str(e)}
+            eng_meta = resolve_engine_meta(eng)
+            results[eng] = {
+                "status": "error",
+                "engine": eng_meta["id"],
+                "engine_display": eng_meta["display"],
+                "model_name": eng_meta["name"],
+                "model_architecture": eng_meta["architecture"],
+                "model_badge": eng_meta["badge"],
+                "error": str(e)
+            }
 
     return {
         "character": req.character_name,
@@ -771,10 +809,11 @@ def clear_step(req: ClearStepRequest):
     elif step == 4:
         cache_dir = Path("cache/synthesized").resolve()
         if cache_dir.exists():
-            for f in cache_dir.glob("*.wav"):
-                if not req.character_name or req.character_name.upper() in f.name.upper():
-                    f.unlink(missing_ok=True)
-                    cleared.append(str(f))
+            for f in cache_dir.iterdir():
+                if f.is_file() and (f.suffix in [".wav", ".json"]):
+                    if not req.character_name or req.character_name.upper() in f.name.upper():
+                        f.unlink(missing_ok=True)
+                        cleared.append(str(f))
         return {"status": "cleared", "step": 4, "cleared": cleared}
 
     else:

@@ -1486,19 +1486,24 @@ class VoicesolateWizardApp {
     grid.innerHTML = "";
 
     checkedEngines.forEach(eng => {
+      const info = this.formatEngineDisplay(eng);
       const card = document.createElement("div");
       card.className = "audio-player-card";
       card.id = `player_card_${eng}`;
-      card.style.borderColor = "var(--accent-cyan)";
+      card.style.borderColor = info.color;
+      card.style.background = "var(--bg-surface-elevated, #161c28)";
       card.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
           <div>
-            <strong style="color:var(--accent-cyan); font-size:13px;">✨ ${eng.toUpperCase()} AI Voice</strong>
-            <span style="font-size:11px; color:var(--text-dim);" id="meta_${eng}">Synthesizing...</span>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <strong style="color:${info.color}; font-size:14px;">${info.icon} ${info.display}</strong>
+              <span class="badge" style="background:rgba(255,255,255,0.08); color:var(--text-main); font-size:10px; padding:2px 6px;">${info.architecture}</span>
+            </div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:4px;" id="meta_${eng}">Synthesizing with <strong>${info.name}</strong>...</div>
           </div>
           <span class="badge badge-ready" id="badge_${eng}">Generating</span>
         </div>
-        <audio id="audio_${eng}" controls style="width:100%; margin-top:8px;"></audio>
+        <audio id="audio_${eng}" controls style="width:100%; margin-top:10px;"></audio>
       `;
       grid.appendChild(card);
     });
@@ -1521,18 +1526,23 @@ class VoicesolateWizardApp {
         const audioEl = document.getElementById(`audio_${eng}`);
         const metaEl = document.getElementById(`meta_${eng}`);
         const badgeEl = document.getElementById(`badge_${eng}`);
+        const info = this.formatEngineDisplay(eng);
+        const modelName = res.model_name || info.name;
+        const badgeText = res.model_badge || info.badge;
 
         if (res.status === "success" && audioEl) {
           audioEl.src = res.url;
-          if (metaEl) metaEl.innerText = `✓ Generated ${res.duration}s (${res.samplerate}Hz)`;
+          if (metaEl) {
+            metaEl.innerHTML = `<span style="color:var(--accent-green);">✓ Synthesized</span> • Model: <strong style="color:#fff;">${modelName}</strong> • ${res.duration}s • ${res.samplerate}Hz`;
+          }
           if (badgeEl) {
-            badgeEl.innerText = "Ready";
+            badgeEl.innerText = `${badgeText} Ready`;
             badgeEl.className = "badge badge-ready";
           }
         } else {
-          if (metaEl) metaEl.innerText = `❌ Error: ${res.error}`;
+          if (metaEl) metaEl.innerText = `❌ ${modelName} Error: ${res.error}`;
           if (badgeEl) {
-            badgeEl.innerText = "Failed";
+            badgeEl.innerText = `${badgeText} Failed`;
             badgeEl.className = "badge badge-locked";
           }
         }
@@ -1550,29 +1560,88 @@ class VoicesolateWizardApp {
     }
   }
 
+  formatEngineDisplay(engId) {
+    const eng = (engId || "").toLowerCase();
+    if (eng.includes("f5")) {
+      return {
+        id: "f5-tts",
+        name: "F5-TTS",
+        display: "F5-TTS (Flow-Matching DiT)",
+        architecture: "Flow-Matching DiT (24kHz)",
+        badge: "F5-TTS",
+        icon: "✨",
+        color: "var(--accent-cyan)"
+      };
+    } else if (eng.includes("xtts") || eng.includes("coqui")) {
+      return {
+        id: "xtts-v2",
+        name: "Coqui XTTS-v2",
+        display: "Coqui XTTS-v2 (Autoregressive)",
+        architecture: "Autoregressive + Latents (24kHz)",
+        badge: "XTTS-v2",
+        icon: "🎙️",
+        color: "var(--accent-purple, #a78bfa)"
+      };
+    } else if (eng.includes("piper")) {
+      return {
+        id: "piper",
+        name: "Piper VITS",
+        display: "Piper (Neural VITS / ONNX)",
+        architecture: "Neural VITS (22.05kHz)",
+        badge: "Piper VITS",
+        icon: "⚡",
+        color: "var(--accent-amber, #fbbf24)"
+      };
+    }
+    return {
+      id: engId || "tts",
+      name: (engId || "TTS").toUpperCase(),
+      display: (engId || "TTS").toUpperCase(),
+      architecture: "Neural Speech Synthesis",
+      badge: (engId || "TTS").toUpperCase(),
+      icon: "🔊",
+      color: "var(--accent-cyan)"
+    };
+  }
+
   renderSynthesizedPlayerCards(results) {
     const grid = document.getElementById("multiPlayerGrid");
     if (!grid) return;
     grid.innerHTML = "";
 
     Object.entries(results).forEach(([eng, res]) => {
+      const info = this.formatEngineDisplay(res.engine || eng);
+      const isSuccess = res.status === "success";
       const card = document.createElement("div");
       card.className = "audio-player-card";
       card.id = `player_card_${eng}`;
-      card.style.borderColor = res.status === "success" ? "var(--accent-cyan)" : "var(--accent-red)";
+      card.style.borderColor = isSuccess ? info.color : "var(--accent-red)";
+      card.style.background = "var(--bg-surface-elevated, #161c28)";
+
+      const modelName = res.model_name || info.name;
+      const modelDisplay = res.engine_display || info.display;
+      const architecture = res.model_architecture || info.architecture;
+      const badgeText = res.model_badge || info.badge;
+
       card.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
           <div>
-            <strong style="color:var(--accent-cyan); font-size:13px;">✨ ${eng.toUpperCase()} AI Voice</strong>
-            <span style="font-size:11px; color:var(--text-dim);" id="meta_${eng}">
-              ${res.status === "success" ? `✓ Generated ${res.duration}s (${res.samplerate}Hz)` : `❌ Error: ${res.error || 'Failed'}`}
-            </span>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <strong style="color:${info.color}; font-size:14px;">${info.icon} ${modelDisplay}</strong>
+              <span class="badge" style="background:rgba(255,255,255,0.08); color:var(--text-main); font-size:10px; padding:2px 6px;">${architecture}</span>
+            </div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:4px;" id="meta_${eng}">
+              ${isSuccess 
+                ? `<span style="color:var(--accent-green);">✓ Synthesized</span> • Model: <strong style="color:#fff;">${modelName}</strong> • ${res.duration}s • ${res.samplerate}Hz` 
+                : `<span style="color:var(--accent-red);">❌ ${modelName} Error:</span> ${res.error || 'Failed'}`}
+            </div>
+            ${res.text ? `<div style="font-size:11px; color:var(--text-muted); margin-top:4px; font-style:italic;">"${res.text.slice(0, 90)}${res.text.length > 90 ? '...' : ''}"</div>` : ''}
           </div>
-          <span class="badge ${res.status === "success" ? 'badge-ready' : 'badge-locked'}" id="badge_${eng}">
-            ${res.status === "success" ? 'Ready' : 'Failed'}
+          <span class="badge ${isSuccess ? 'badge-ready' : 'badge-locked'}" id="badge_${eng}">
+            ${isSuccess ? `${badgeText} Ready` : 'Failed'}
           </span>
         </div>
-        <audio id="audio_${eng}" controls src="${res.url || ''}" style="width:100%; margin-top:8px;"></audio>
+        <audio id="audio_${eng}" controls src="${res.url || ''}" style="width:100%; margin-top:10px;"></audio>
       `;
       grid.appendChild(card);
     });
@@ -1584,19 +1653,35 @@ class VoicesolateWizardApp {
     grid.innerHTML = "";
 
     cachedList.forEach((item, idx) => {
+      const info = this.formatEngineDisplay(item.engine);
       const card = document.createElement("div");
       card.className = "audio-player-card";
       card.id = `player_card_cached_${idx}`;
-      card.style.borderColor = "rgba(255,255,255,0.15)";
+      card.style.borderColor = "rgba(255,255,255,0.18)";
+      card.style.background = "var(--bg-surface-elevated, #161c28)";
+
+      const modelName = item.model_name || info.name;
+      const modelDisplay = item.engine_display || info.display;
+      const architecture = item.model_architecture || info.architecture;
+      const badgeText = item.model_badge || info.badge;
+
       card.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
           <div>
-            <strong style="color:var(--accent-cyan); font-size:13px;">🎙️ Previous Session Synthesis</strong>
-            <span style="font-size:11px; color:var(--text-dim);">${item.duration}s • ${item.samplerate}Hz • ${item.filename}</span>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <strong style="color:${info.color}; font-size:14px;">${info.icon} ${modelDisplay}</strong>
+              <span class="badge" style="background:rgba(255,255,255,0.08); color:var(--text-main); font-size:10px; padding:2px 6px;">${architecture}</span>
+            </div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">
+              Model: <strong style="color:#fff;">${modelName}</strong> • ${item.duration}s • ${item.samplerate}Hz • Cached Session
+            </div>
+            ${item.text ? `<div style="font-size:11px; color:var(--text-muted); margin-top:4px; font-style:italic;">"${item.text.slice(0, 90)}${item.text.length > 90 ? '...' : ''}"</div>` : ''}
           </div>
-          <span class="badge badge-ready">Cached</span>
+          <span class="badge badge-ready" style="background:rgba(34, 197, 94, 0.15); border:1px solid rgba(34,197,94,0.3); color:#4ade80;">
+            ${badgeText}
+          </span>
         </div>
-        <audio controls src="${item.url}" style="width:100%; margin-top:8px;"></audio>
+        <audio controls src="${item.url}" style="width:100%; margin-top:10px;"></audio>
       `;
       grid.appendChild(card);
     });

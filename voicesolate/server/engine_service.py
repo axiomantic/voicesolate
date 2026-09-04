@@ -1,5 +1,7 @@
 import os
 import sys
+import re
+import time
 import json
 import uuid
 import shutil
@@ -27,6 +29,58 @@ try:
     tf_logging.set_verbosity_error()
 except Exception:
     pass
+
+ENGINE_SPECS = {
+    "f5-tts": {
+        "id": "f5-tts",
+        "name": "F5-TTS",
+        "display": "F5-TTS (Flow-Matching DiT)",
+        "architecture": "Flow-Matching Diffusion Transformer (24kHz)",
+        "badge": "F5-TTS",
+        "samplerate": 24000,
+    },
+    "xtts-v2": {
+        "id": "xtts-v2",
+        "name": "Coqui XTTS-v2",
+        "display": "Coqui XTTS-v2 (Autoregressive)",
+        "architecture": "Autoregressive GPT + Latent Diffusion (24kHz)",
+        "badge": "XTTS-v2",
+        "samplerate": 24000,
+    },
+    "piper": {
+        "id": "piper",
+        "name": "Piper VITS",
+        "display": "Piper (Neural VITS / ONNX)",
+        "architecture": "Fast CPU Neural VITS (22.05kHz)",
+        "badge": "Piper VITS",
+        "samplerate": 22050,
+    }
+}
+
+def resolve_engine_meta(engine_id_or_hint: str, samplerate: Optional[int] = None) -> Dict[str, Any]:
+    hint = (engine_id_or_hint or "").lower()
+    if "f5" in hint:
+        return dict(ENGINE_SPECS["f5-tts"])
+    elif "xtts" in hint or "coqui" in hint:
+        return dict(ENGINE_SPECS["xtts-v2"])
+    elif "piper" in hint:
+        return dict(ENGINE_SPECS["piper"])
+
+    if samplerate == 22050:
+        return dict(ENGINE_SPECS["piper"])
+    elif samplerate == 24000:
+        return dict(ENGINE_SPECS["f5-tts"])
+
+    clean_name = (engine_id_or_hint or "Neural TTS").upper()
+    return {
+        "id": (engine_id_or_hint or "tts").lower(),
+        "name": clean_name,
+        "display": f"{clean_name} Model",
+        "architecture": "Neural Speech Synthesis",
+        "badge": clean_name,
+        "samplerate": samplerate or 24000,
+    }
+
 
 class EngineService:
     """
@@ -370,10 +424,17 @@ class EngineService:
             raise ValueError("Synthesis text cannot be empty.")
 
         cdir = Path(character_dir)
-        synth_id = f"synth_{int(uuid.uuid4().hex[:10], 16)}_{int(speed*100)}"
-        out_wav = self.cache_synth_dir / f"{synth_id}.wav"
-
         engine_clean = engine_id.lower()
+        eng_meta = resolve_engine_meta(engine_clean)
+
+        # Standardized naming: synth_{character}_{engine_slug}_{timestamp}_{rand}
+        char_slug = re.sub(r'[^a-zA-Z0-9_-]', '', cdir.name.lower()) or "voice"
+        eng_slug = "f5tts" if "f5" in engine_clean else ("xtts" if "xtts" in engine_clean or "coqui" in engine_clean else "piper")
+        timestamp_int = int(time.time())
+        rand_id = uuid.uuid4().hex[:6]
+        synth_id = f"synth_{char_slug}_{eng_slug}_{timestamp_int}_{rand_id}"
+        out_wav = self.cache_synth_dir / f"{synth_id}.wav"
+        out_json = self.cache_synth_dir / f"{synth_id}.json"
 
         if "f5" in engine_clean:
             # Resolve reference audio
@@ -484,14 +545,40 @@ class EngineService:
             raise RuntimeError(f"Engine {engine_id} finished but produced an invalid audio file.")
 
         info = sf.info(str(out_wav))
+        meta_payload = {
+            "synth_id": synth_id,
+            "character": cdir.name,
+            "engine": eng_meta["id"],
+            "engine_display": eng_meta["display"],
+            "model_name": eng_meta["name"],
+            "model_architecture": eng_meta["architecture"],
+            "model_badge": eng_meta["badge"],
+            "text": text.strip(),
+            "speed": float(speed),
+            "seed": int(seed) if seed is not None else 42,
+            "duration": round(info.duration, 2),
+            "samplerate": info.samplerate,
+            "created_at": time.time(),
+            "created_at_formatted": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        }
+        try:
+            with open(out_json, "w", encoding="utf-8") as jf:
+                json.dump(meta_payload, jf, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to write synthesis metadata sidecar: {e}")
+
         return {
             "synth_id": synth_id,
             "file_path": str(out_wav),
             "url": f"/api/v1/audio/stream?path={urllib.parse.quote(str(out_wav.resolve()))}",
             "duration": round(info.duration, 2),
             "samplerate": info.samplerate,
-            "engine": engine_id,
-            "text": text
+            "engine": eng_meta["id"],
+            "engine_display": eng_meta["display"],
+            "model_name": eng_meta["name"],
+            "model_architecture": eng_meta["architecture"],
+            "model_badge": eng_meta["badge"],
+            "text": text.strip()
         }
 
 engine_service = EngineService()

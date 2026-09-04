@@ -81,6 +81,16 @@ class TestApiEndpoints:
         assert "clip_count" in data["dataset_stats"]
         assert isinstance(data["dataset_stats"]["clip_count"], int)
         assert isinstance(data["cached_syntheses"], list)
+        if len(data["cached_syntheses"]) > 0:
+            for synth in data["cached_syntheses"]:
+                assert "engine" in synth and synth["engine"]
+                assert "engine_display" in synth and synth["engine_display"]
+                assert "model_name" in synth and synth["model_name"]
+                assert "model_architecture" in synth and synth["model_architecture"]
+                assert "duration" in synth and isinstance(synth["duration"], (int, float))
+                assert "samplerate" in synth and isinstance(synth["samplerate"], int)
+                assert "url" in synth and synth["url"].startswith("/api/v1/audio/stream")
+                assert "Previous Session" not in synth["model_name"]
 
         # 2. Negative control: Nonexistent character must return 200 with empty stats, not crash with 500
         ghost_res = client.get("/api/v1/characters/NONEXISTENT_GHOST_CHARACTER_999/details")
