@@ -137,6 +137,13 @@ class SearchAligner:
             words = target_clean.split()
             num_words = len(words)
 
+            if progress and task_id is not None:
+                trunc = (target_text[:30] + "...") if len(target_text) > 30 else target_text
+                progress.update(
+                    task_id,
+                    description=f"[cyan]Aligning [{line_idx+1}/{len(target_lines)}] {target.character}: \"{trunc}\""
+                )
+
             best_start = None
             best_end = None
             best_score = 0.0

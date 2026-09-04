@@ -199,9 +199,12 @@ def main():
             if discarded > 0:
                 console.print(f"[yellow]Filtered out {discarded} clip(s) shorter than {args.min_duration:.1f}s.[/yellow]")
 
-        export_task = progress.add_task("[magenta]Exporting & Enhancing Clips...", total=len(aligned_clips))
+        export_task = progress.add_task(
+            f"[magenta]Processing {len(aligned_clips)} clips...",
+            total=len(aligned_clips)
+        )
 
-        for clip in aligned_clips:
+        for clip_i, clip in enumerate(aligned_clips):
             char_dir = output_base_dir / clip.character
             raw_dir = char_dir / "raw"
             enhanced_dir = char_dir / "enhanced"
@@ -211,6 +214,12 @@ def main():
 
             clip_path = raw_dir / f"{clip.timecode_str}.wav"
             enhanced_path = enhanced_dir / f"{clip.timecode_str}_enhanced.wav"
+
+            trunc_text = (clip.text[:35] + "...") if len(clip.text) > 35 else clip.text
+            progress.update(
+                export_task,
+                description=f"[magenta][{clip_i+1}/{len(aligned_clips)}] {clip.character}: \"{trunc_text}\""
+            )
 
             # 1. Slice audio (Idempotent: reuse existing slice unless --no-cache-audio is set)
             if not clip_path.exists() or args.no_cache_audio:
@@ -240,6 +249,8 @@ def main():
             manifest["clips"].append(clip_entry)
 
             progress.advance(export_task, 1)
+
+        progress.update(export_task, description="[bold green]✓ All clips processed and enhanced!")
 
     # Save manifest.json
     manifest_file = output_base_dir / "manifest.json"
