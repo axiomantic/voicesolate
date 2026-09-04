@@ -271,6 +271,47 @@ class EngineService:
 
         return prompts
 
+    def _get_f5_model(self):
+        if self._f5_model is not None:
+            return self._f5_model
+
+        # Patch F5-TTS to prevent multi-threaded MPS crashes on Apple Silicon
+        import f5_tts.infer.utils_infer as f5_infer
+        import f5_tts.model.utils as f5_utils
+        import concurrent.futures
+
+        class SequentialExecutor(concurrent.futures.Executor):
+            def submit(self, fn, *args, **kwargs):
+                f = concurrent.futures.Future()
+                try:
+                    res = fn(*args, **kwargs)
+                    f.set_result(res)
+                except Exception as e:
+                    f.set_exception(e)
+                return f
+
+        f5_infer.ThreadPoolExecutor = SequentialExecutor
+
+        _orig_seed_everything = f5_utils.seed_everything
+        def _safe_seed_everything(seed=0):
+            safe_seed = int(seed) % (2**31 - 1)
+            return _orig_seed_everything(safe_seed)
+        f5_utils.seed_everything = _safe_seed_everything
+
+        # Sanitize PYTHONHASHSEED if corrupt
+        if "PYTHONHASHSEED" in os.environ:
+            try:
+                val = int(os.environ["PYTHONHASHSEED"])
+                if val < 0 or val > 4294967295:
+                    os.environ.pop("PYTHONHASHSEED", None)
+            except Exception:
+                os.environ.pop("PYTHONHASHSEED", None)
+
+        from f5_tts.api import F5TTS
+        device = "mps" if (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()) else ("cuda" if torch.cuda.is_available() else "cpu")
+        self._f5_model = F5TTS(device=device)
+        return self._f5_model
+
     def synthesize(
         self,
         character_dir: Path,
@@ -306,13 +347,11 @@ class EngineService:
                 else:
                     raise FileNotFoundError("Reference voice prompt audio not found for F5-TTS.")
 
-            if self._f5_model is None:
-                from f5_tts.api import F5TTS
-                self._f5_model = F5TTS()
+            model = self._get_f5_model()
 
-            safe_seed = int(seed) % (2**31 - 1) if seed else 42
+            safe_seed = int(seed) % (2**31 - 1) if seed is not None else 42
 
-            self._f5_model.infer(
+            model.infer(
                 ref_file=ref_wav,
                 ref_text=ref_txt,
                 gen_text=text.strip(),
