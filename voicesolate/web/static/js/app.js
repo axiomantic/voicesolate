@@ -460,18 +460,40 @@ class VoicesolateWizardApp {
 
     if (clearBtn) {
       clearBtn.addEventListener("click", async () => {
-        if (confirm(`Clear extracted clips and STT cache for ${this.selectedCharacter}?`)) {
+        clearBtn.disabled = true;
+        clearBtn.innerText = "⏳ Clearing...";
+        try {
           await api.clearStep(2, this.episodeName, this.selectedCharacter);
           this.alignedClips = [];
           if (this.radar) {
             this.radar.clips = [];
+            this.radar.activeClip = null;
+            this.radar.hoverClip = null;
+            this.radar.workers = {};
             this.radar.draw();
           }
-          document.getElementById("radarClipsCount").innerText = "0 clips";
-          document.getElementById("step2ExtractionStatusText").innerText = "Cache cleared. Ready to search.";
-          document.getElementById("step2GatingStatus").innerText = "Audio search cache cleared. Rerun search.";
+          this.waveformData = null;
+
+          const radarClipsEl = document.getElementById("radarClipsCount");
+          if (radarClipsEl) radarClipsEl.innerText = "0 clips";
+
+          const extStatusEl = document.getElementById("step2ExtractionStatusText");
+          if (extStatusEl) extStatusEl.innerText = "Audio cache cleared. Ready to search.";
+
+          const gatingStatusEl = document.getElementById("step2GatingStatus");
+          if (gatingStatusEl) gatingStatusEl.innerText = "Audio search cache cleared. Click Start Search to extract.";
+
+          const inspector = document.getElementById("clipInspectorContainer");
+          if (inspector) inspector.style.display = "none";
+
           if (nextBtn) nextBtn.disabled = true;
           this.markStepIncomplete(2);
+        } catch (err) {
+          console.error("Failed to clear audio cache:", err);
+          alert(`Failed to clear cache: ${err.message}`);
+        } finally {
+          clearBtn.disabled = false;
+          clearBtn.innerText = "🗑️ Clear Audio Cache";
         }
       });
     }
@@ -523,18 +545,35 @@ class VoicesolateWizardApp {
     if (!this.selectedCharacter) return;
     try {
       const details = await api.getCharacterDetails(this.selectedCharacter, this.episodeName);
-      if (details && details.dataset_stats && details.dataset_stats.clip_count > 0) {
-        const clipCount = details.dataset_stats.clip_count;
-        document.getElementById("radarClipsCount").innerText = `${clipCount} clips`;
-        document.getElementById("step2ExtractionStatusText").innerText = `✓ Found ${clipCount} existing neural clips for ${this.selectedCharacter}`;
-        document.getElementById("step2GatingStatus").innerText = `✓ Complete! ${clipCount} clips matched and isolated for ${this.selectedCharacter}.`;
-        
-        const nextBtn = document.getElementById("step2NextBtn");
+      const clipCount = details?.dataset_stats?.clip_count || 0;
+      const nextBtn = document.getElementById("step2NextBtn");
+      const radarClipsEl = document.getElementById("radarClipsCount");
+      const extStatusEl = document.getElementById("step2ExtractionStatusText");
+      const gatingStatusEl = document.getElementById("step2GatingStatus");
+
+      if (clipCount > 0) {
+        if (radarClipsEl) radarClipsEl.innerText = `${clipCount} clips`;
+        if (extStatusEl) extStatusEl.innerText = `✓ Found ${clipCount} existing neural clips for ${this.selectedCharacter}`;
+        if (gatingStatusEl) gatingStatusEl.innerText = `✓ Complete! ${clipCount} clips matched and isolated for ${this.selectedCharacter}.`;
         if (nextBtn) nextBtn.disabled = false;
         this.markStepCompleted(2);
+      } else {
+        if (radarClipsEl) radarClipsEl.innerText = "0 clips";
+        if (extStatusEl) extStatusEl.innerText = "No clips extracted yet. Ready to search.";
+        if (gatingStatusEl) gatingStatusEl.innerText = "Awaiting audio extraction. Click Start Search to begin.";
+        if (nextBtn) nextBtn.disabled = true;
+        this.markStepIncomplete(2);
       }
     } catch (e) {
-      // Not yet extracted
+      const nextBtn = document.getElementById("step2NextBtn");
+      const radarClipsEl = document.getElementById("radarClipsCount");
+      const extStatusEl = document.getElementById("step2ExtractionStatusText");
+      const gatingStatusEl = document.getElementById("step2GatingStatus");
+      if (radarClipsEl) radarClipsEl.innerText = "0 clips";
+      if (extStatusEl) extStatusEl.innerText = "No clips extracted yet. Ready to search.";
+      if (gatingStatusEl) gatingStatusEl.innerText = "Awaiting audio extraction. Click Start Search to begin.";
+      if (nextBtn) nextBtn.disabled = true;
+      this.markStepIncomplete(2);
     }
   }
 
@@ -1056,23 +1095,27 @@ class VoicesolateWizardApp {
     try {
       const episodes = await api.getEpisodes();
       if (episodes && episodes.length > 0) {
-        const ep = episodes[0];
-        this.episodeName = ep.id;
-        this.episodeCode = "s06e01";
+        // Prefer an episode with existing clips, otherwise top episode
+        const activeEp = episodes.find(e => e.clips_count > 0) || episodes[0];
+        this.episodeName = activeEp.id;
+        
+        const m = activeEp.id.match(/s0?(\d+)[ex]0?(\d+)/i);
+        const epCode = m ? `s${m[1].padStart(2, '0')}e${m[2].padStart(2, '0')}` : "s06e01";
+        this.episodeCode = epCode;
 
         // Pre-fill Step 1
         const inputPath = document.getElementById("wizardInputPath");
         const epInput = document.getElementById("wizardEpisodeInput");
-        if (inputPath) {
+        if (inputPath && !inputPath.value) {
           inputPath.value = `sftp://elijah@flanopticon.lan/mnt/nas/media/downloads/complete/TV Shows/www.UIndex.org    -    Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune/Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune.mkv`;
           this.mediaPath = inputPath.value;
         }
-        if (epInput) {
-          epInput.value = "s06e01";
+        if (epInput && !epInput.value) {
+          epInput.value = epCode;
         }
 
         // Fetch script & characters
-        await this.fetchScript("s06e01", "startrek", "CLEMENS");
+        await this.fetchScript(epCode, "startrek", "CLEMENS");
 
         // Mark Step 1 complete
         this.markStepCompleted(1);

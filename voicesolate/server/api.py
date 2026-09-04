@@ -105,16 +105,21 @@ def get_system_status():
 def _find_character_dir(character_name: Optional[str], episode: Optional[str] = None) -> Optional[Path]:
     if not character_name:
         return None
-    out_root = Path("./output")
-    if not out_root.exists():
-        return None
-    if episode:
-        cand = out_root / episode / character_name
-        if cand.exists():
-            return cand
-    for ep in out_root.iterdir():
-        if ep.is_dir() and not ep.name.startswith(".") and (ep / character_name).exists():
-            return ep / character_name
+    for out_root in [Path("./output"), Path("./output2")]:
+        if not out_root.exists():
+            continue
+        if episode:
+            ep_dir = _find_episode_dir(episode)
+            if ep_dir:
+                cand = ep_dir / character_name
+                if cand.exists():
+                    return cand
+            return None
+
+        # Episode not specified: pick most recent matching episode
+        for ep in sorted(out_root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+            if ep.is_dir() and not ep.name.startswith(".") and (ep / character_name).exists():
+                return ep / character_name
     return None
 
 @app.get("/api/v1/system/engines")
@@ -265,12 +270,20 @@ def list_episodes():
                 })
     return episodes
 
-def _find_episode_dir(episode_name: str) -> Optional[Path]:
+def _find_episode_dir(episode_name: Optional[str]) -> Optional[Path]:
+    if not episode_name:
+        return None
     for out_root in [Path("./output"), Path("./output2")]:
         if out_root.exists():
             cand = out_root / episode_name
             if cand.exists() and cand.is_dir():
                 return cand
+            clean_needle = re.sub(r"[^a-zA-Z0-9]", "", episode_name.lower())
+            for d in out_root.iterdir():
+                if d.is_dir() and not d.name.startswith("."):
+                    clean_d = re.sub(r"[^a-zA-Z0-9]", "", d.name.lower())
+                    if clean_needle in clean_d or clean_d in clean_needle:
+                        return d
     return None
 
 @app.get("/api/v1/episodes/{episode_name}")
@@ -318,8 +331,20 @@ def get_episode_waveform(episode_name: str):
 @app.get("/api/v1/characters/{character_name}/details")
 def get_character_details(character_name: str, episode: Optional[str] = None):
     char_dir = _find_character_dir(character_name, episode)
-    if not char_dir:
-        raise HTTPException(status_code=404, detail=f"Character {character_name} not found in output.")
+    if not char_dir or not char_dir.exists():
+        return {
+            "character_name": character_name,
+            "directory": "",
+            "quotes": [],
+            "reference_prompts": [],
+            "engines": engine_service.get_engines_status(None),
+            "dataset_stats": {
+                "clip_count": 0,
+                "piper_dataset_ready": False,
+                "xtts_dataset_ready": False,
+                "f5tts_dataset_ready": False
+            }
+        }
 
     quotes = engine_service.get_character_dialogue_quotes(char_dir)
     ref_prompts = engine_service.get_reference_prompts(char_dir)
@@ -327,6 +352,9 @@ def get_character_details(character_name: str, episode: Optional[str] = None):
 
     # Dataset stats
     piper_wavs = list((char_dir / "datasets" / "piper" / "wavs").glob("*.wav")) if (char_dir / "datasets" / "piper" / "wavs").exists() else []
+    raw_wavs = list((char_dir / "raw").glob("*.wav")) if (char_dir / "raw").exists() else []
+    enh_wavs = list((char_dir / "enhanced").glob("*.wav")) if (char_dir / "enhanced").exists() else []
+    total_clips = max(len(piper_wavs), len(enh_wavs), len(raw_wavs))
     
     return {
         "character_name": character_name,
@@ -335,7 +363,7 @@ def get_character_details(character_name: str, episode: Optional[str] = None):
         "reference_prompts": ref_prompts,
         "engines": engines,
         "dataset_stats": {
-            "clip_count": len(piper_wavs),
+            "clip_count": total_clips,
             "piper_dataset_ready": (char_dir / "datasets" / "piper" / "metadata.csv").exists(),
             "xtts_dataset_ready": (char_dir / "datasets" / "xtts" / "metadata.csv").exists(),
             "f5tts_dataset_ready": (char_dir / "datasets" / "f5tts" / "metadata.csv").exists()
@@ -487,37 +515,86 @@ def clear_step(req: ClearStepRequest):
         return {"status": "cleared", "step": 1, "details": "Reset step 1 selections"}
 
     elif step == 2:
-        char_dir = _find_character_dir(req.character_name, req.episode_name)
-        if char_dir:
-            raw_dir = char_dir / "raw"
-            if raw_dir.exists():
-                shutil.rmtree(raw_dir, ignore_errors=True)
-                cleared.append(str(raw_dir))
-            enh_dir = char_dir / "enhanced"
-            if enh_dir.exists():
-                shutil.rmtree(enh_dir, ignore_errors=True)
-                cleared.append(str(enh_dir))
+        target_dirs = []
+        if req.character_name and req.episode_name:
+            char_dir = _find_character_dir(req.character_name, req.episode_name)
+            if char_dir:
+                target_dirs.append(char_dir)
+            ep_dir = _find_episode_dir(req.episode_name)
+            if ep_dir and (ep_dir / req.character_name).exists():
+                c_cand = ep_dir / req.character_name
+                if c_cand not in target_dirs:
+                    target_dirs.append(c_cand)
+        elif req.character_name:
+            for out_root in [Path("./output"), Path("./output2")]:
+                if out_root.exists():
+                    for ep in out_root.iterdir():
+                        if ep.is_dir() and (ep / req.character_name).exists():
+                            target_dirs.append(ep / req.character_name)
+        elif req.episode_name:
+            ep_dir = _find_episode_dir(req.episode_name)
+            if ep_dir:
+                for c in ep_dir.iterdir():
+                    if c.is_dir() and not c.name.startswith("."):
+                        target_dirs.append(c)
 
-        ep_dir = _find_episode_dir(req.episode_name) if req.episode_name else None
-        if ep_dir:
-            manifest_file = ep_dir / "manifest.json"
-            if manifest_file.exists():
-                manifest_file.unlink(missing_ok=True)
-                cleared.append(str(manifest_file))
+        # Remove raw, enhanced, datasets, and models
+        for c_dir in target_dirs:
+            for sub in ["raw", "enhanced", "datasets", "models"]:
+                sub_p = c_dir / sub
+                if sub_p.exists():
+                    shutil.rmtree(sub_p, ignore_errors=True)
+                    cleared.append(str(sub_p))
+
+        # Clear episode manifest if applicable
+        if req.episode_name:
+            ep_dir = _find_episode_dir(req.episode_name)
+            if ep_dir:
+                manifest_file = ep_dir / "manifest.json"
+                if manifest_file.exists():
+                    manifest_file.unlink(missing_ok=True)
+                    cleared.append(str(manifest_file))
+
+        # Clear STT cache files matching episode or character
+        cache_stt = Path("cache/stt").resolve()
+        if cache_stt.exists():
+            for f in cache_stt.glob("*.json"):
+                match = False
+                if req.episode_name and req.episode_name[:15].lower() in f.name.lower():
+                    match = True
+                if req.character_name and req.character_name.lower() in f.name.lower():
+                    match = True
+                if match:
+                    f.unlink(missing_ok=True)
+                    cleared.append(str(f))
+
+        # Clear audio stems
+        cache_stems = Path("cache/audio/stems").resolve()
+        if cache_stems.exists():
+            for d in cache_stems.iterdir():
+                if d.is_dir() and req.episode_name and req.episode_name[:15].lower() in d.name.lower():
+                    shutil.rmtree(d, ignore_errors=True)
+                    cleared.append(str(d))
 
         return {"status": "cleared", "step": 2, "cleared": cleared}
 
     elif step == 3:
-        char_dir = _find_character_dir(req.character_name, req.episode_name)
-        if char_dir:
-            ds_dir = char_dir / "datasets"
-            if ds_dir.exists():
-                shutil.rmtree(ds_dir, ignore_errors=True)
-                cleared.append(str(ds_dir))
-            models_dir = char_dir / "models"
-            if models_dir.exists():
-                shutil.rmtree(models_dir, ignore_errors=True)
-                cleared.append(str(models_dir))
+        target_dirs = []
+        if req.character_name and req.episode_name:
+            char_dir = _find_character_dir(req.character_name, req.episode_name)
+            if char_dir: target_dirs.append(char_dir)
+        elif req.character_name:
+            for out_root in [Path("./output"), Path("./output2")]:
+                if out_root.exists():
+                    for ep in out_root.iterdir():
+                        if ep.is_dir() and (ep / req.character_name).exists():
+                            target_dirs.append(ep / req.character_name)
+        for c_dir in target_dirs:
+            for sub in ["datasets", "models"]:
+                sub_p = c_dir / sub
+                if sub_p.exists():
+                    shutil.rmtree(sub_p, ignore_errors=True)
+                    cleared.append(str(sub_p))
         return {"status": "cleared", "step": 3, "cleared": cleared}
 
     elif step == 4:
