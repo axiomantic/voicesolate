@@ -1,4 +1,5 @@
 import os
+os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
 import sys
 import tempfile
 import json
@@ -213,7 +214,7 @@ class VoiceStudioGUI:
         }
         active_theme = theme_map.get(theme.lower(), gr.themes.Ocean())
 
-        with gr.Blocks(title=f"Voicesolate Studio — {self.char_name}", css=minimal_css) as demo:
+        with gr.Blocks(title=f"Voicesolate Studio — {self.char_name}", analytics_enabled=False) as demo:
             # Header
             gr.Markdown(
                 f"""
@@ -333,4 +334,4 @@ class VoiceStudioGUI:
             )
 
         print(f"\nLaunching Clean Voicesolate Studio at http://localhost:{server_port} [Theme: {theme}]")
-        demo.launch(server_port=server_port, inbrowser=inbrowser, quiet=True, theme=active_theme)
+        demo.launch(server_port=server_port, inbrowser=inbrowser, quiet=True, theme=active_theme, css=minimal_css)
