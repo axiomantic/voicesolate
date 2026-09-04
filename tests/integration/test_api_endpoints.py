@@ -134,3 +134,17 @@ class TestApiEndpoints:
         # 3. Negative control: Empty body returns 400
         bad_del = client.post("/api/v1/synthesis/delete", json={})
         assert bad_del.status_code == 400
+
+    def test_piper_character_model_and_baseline_resolution(self, client: TestClient):
+        response = client.get("/api/v1/characters/CLEMENS/details")
+        assert response.status_code == 200
+        data = response.json()
+        engines = {e["id"]: e for e in data.get("engines", [])}
+        assert "piper" in engines
+        piper = engines["piper"]
+        assert piper["installed"] is True
+        assert piper["trained"] is True
+        assert piper["is_baseline"] is False
+        assert piper["model_path"] is not None
+        assert "clemens.onnx" in piper["model_path"].lower()
+

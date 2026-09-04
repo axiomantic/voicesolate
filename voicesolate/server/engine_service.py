@@ -170,11 +170,34 @@ class EngineService:
             xtts_ref = cdir / "datasets" / "xtts" / "reference_audio"
             xtts_ready = xtts_pkg and (xtts_ref.exists() and len(list(xtts_ref.glob("*.wav"))) > 0)
 
-            # Piper ONNX
-            piper_models = list((cdir / "models" / "piper").glob("*.onnx")) if (cdir / "models" / "piper").exists() else []
-            if piper_models:
+            # Piper ONNX resolution
+            piper_dir = cdir / "models" / "piper"
+            voice_json_path = piper_dir / "voice.json"
+            vj_data = {}
+            if voice_json_path.exists():
+                try:
+                    with open(voice_json_path, "r", encoding="utf-8") as vj:
+                        vj_data = json.load(vj)
+                except Exception:
+                    pass
+
+            if vj_data.get("model_file") and (piper_dir / vj_data["model_file"]).exists():
+                piper_onnx_path = str((piper_dir / vj_data["model_file"]).resolve())
+            else:
+                char_slug = cdir.name.lower().replace(" ", "_")
+                candidate = piper_dir / f"{char_slug}.onnx"
+                if candidate.exists():
+                    piper_onnx_path = str(candidate.resolve())
+                else:
+                    onnx_files = list(piper_dir.glob("*.onnx")) if piper_dir.exists() else []
+                    non_baseline = [p for p in onnx_files if not any(b in p.name.lower() for b in ["bryce", "en_us", "baseline"])]
+                    if non_baseline:
+                        piper_onnx_path = str(non_baseline[0].resolve())
+                    elif onnx_files:
+                        piper_onnx_path = str(onnx_files[0].resolve())
+
+            if piper_onnx_path:
                 piper_ready = piper_pkg
-                piper_onnx_path = str(piper_models[0])
             
             # Piper dataset
             piper_ds = cdir / "datasets" / "piper" / "metadata.csv"
@@ -216,17 +239,14 @@ class EngineService:
         piper_is_baseline = False
         if piper_onnx_path:
             p_name = Path(piper_onnx_path).name.lower()
-            if "bryce" in p_name or "en_us" in p_name or "baseline" in p_name:
+            status = vj_data.get("status", "") if "vj_data" in locals() else ""
+            is_named_baseline = any(b in p_name for b in ["bryce", "en_us", "baseline"])
+            if status == "trained":
+                piper_is_baseline = False
+            elif is_named_baseline or status in ["ready_to_train", "baseline"]:
                 piper_is_baseline = True
-            voice_json = Path(piper_onnx_path).parent / "voice.json"
-            if voice_json.exists():
-                try:
-                    with open(voice_json, "r") as vj:
-                        vj_data = json.load(vj)
-                        if vj_data.get("status") in ["ready_to_train", "baseline"]:
-                            piper_is_baseline = True
-                except Exception:
-                    pass
+            else:
+                piper_is_baseline = False
 
         engines = [
             {
@@ -515,19 +535,44 @@ class EngineService:
 
         elif "piper" in engine_clean:
             # Check for ONNX model in character folder
-            piper_models = list((cdir / "models" / "piper").glob("*.onnx")) if (cdir / "models" / "piper").exists() else []
-            if not piper_models:
+            piper_dir = cdir / "models" / "piper"
+            voice_json_path = piper_dir / "voice.json"
+            vj_data = {}
+            if voice_json_path.exists():
+                try:
+                    with open(voice_json_path, "r", encoding="utf-8") as vj:
+                        vj_data = json.load(vj)
+                except Exception:
+                    pass
+
+            onnx_path = None
+            if vj_data.get("model_file") and (piper_dir / vj_data["model_file"]).exists():
+                onnx_path = piper_dir / vj_data["model_file"]
+            else:
+                char_slug = cdir.name.lower().replace(" ", "_")
+                candidate = piper_dir / f"{char_slug}.onnx"
+                if candidate.exists():
+                    onnx_path = candidate
+                else:
+                    onnx_files = list(piper_dir.glob("*.onnx")) if piper_dir.exists() else []
+                    non_baseline = [p for p in onnx_files if not any(b in p.name.lower() for b in ["bryce", "en_us", "baseline"])]
+                    if non_baseline:
+                        onnx_path = non_baseline[0]
+                    elif onnx_files:
+                        onnx_path = onnx_files[0]
+
+            if not onnx_path or not onnx_path.exists():
                 raise FileNotFoundError(
                     "Piper ONNX model not compiled yet for this character. "
                     "Use the Dataset & Engine Hub to compile or download a voice profile."
                 )
 
-            onnx_path = piper_models[0]
             json_path = onnx_path.with_suffix(".onnx.json")
             if not json_path.exists():
                 json_path = onnx_path.with_name(f"{onnx_path.name}.json")
 
             from piper import PiperVoice
+            import piper.config
             if self._piper_voice is None or self._loaded_piper_model_path != str(onnx_path):
                 self._piper_voice = PiperVoice.load(
                     str(onnx_path),
@@ -535,8 +580,19 @@ class EngineService:
                 )
                 self._loaded_piper_model_path = str(onnx_path)
 
+            # Map speed and persona / accent guidance (cfg_strength) to Piper synthesis parameters
+            length_scale = 1.0 / max(0.2, float(speed))
+            noise_scale = min(1.2, max(0.2, 0.667 * (float(cfg_strength) / 2.8)))
+            noise_w_scale = min(1.2, max(0.2, 0.8 * (float(cfg_strength) / 2.8)))
+
+            syn_config = piper.config.SynthesisConfig(
+                length_scale=length_scale,
+                noise_scale=noise_scale,
+                noise_w_scale=noise_w_scale
+            )
+
             with wave.open(str(out_wav), "wb") as wav_f:
-                self._piper_voice.synthesize_wav(text.strip(), wav_f)
+                self._piper_voice.synthesize_wav(text.strip(), wav_f, syn_config=syn_config)
 
         else:
             raise ValueError(f"Unknown engine: {engine_id}")

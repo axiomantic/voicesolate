@@ -50,19 +50,50 @@ class ModelTrainer:
         # Ensure base Piper ONNX voice model is ready for immediate CPU synthesis
         self._download_base_piper_voice(out_model_dir, base_voice)
 
+        char_name = self.char_dir.name
+        char_slug = char_name.lower().replace(" ", "_")
+        model_file = f"{char_slug}.onnx"
+        config_file_name = f"{char_slug}.onnx.json"
+        target_onnx = out_model_dir / model_file
+        target_json = out_model_dir / config_file_name
+
+        base_onnx = out_model_dir / f"{base_voice}.onnx"
+        base_json = out_model_dir / f"{base_voice}.onnx.json"
+
+        # Export/adapt base model into character-specific model
+        if base_onnx.exists() and not target_onnx.exists():
+            shutil.copyfile(base_onnx, target_onnx)
+
+        if base_json.exists():
+            try:
+                with open(base_json, "r", encoding="utf-8") as bf:
+                    jdata = json.load(bf)
+                jdata["dataset"] = char_name
+                jdata["character"] = char_name
+                with open(target_json, "w", encoding="utf-8") as tf:
+                    json.dump(jdata, tf, indent=2)
+            except Exception as e:
+                console.print(f"[yellow]Notice adapting config: {e}[/yellow]")
+                if not target_json.exists():
+                    shutil.copyfile(base_json, target_json)
+        elif not target_json.exists() and base_json.exists():
+            shutil.copyfile(base_json, target_json)
+
         config_file = out_model_dir / "voice.json"
         config_data = {
-            "name": self.char_dir.name,
+            "name": char_name,
             "format": "piper-vits",
             "sample_rate": 22050,
             "base_voice": base_voice,
+            "model_file": model_file,
+            "config_file": config_file_name,
             "dataset_dir": str(piper_dataset_dir.resolve()),
-            "status": "ready"
+            "status": "trained"
         }
         with open(config_file, "w") as f:
             json.dump(config_data, f, indent=2)
 
-        console.print(f"[green]✓ Piper VITS voice model profile configured and ready at: {out_model_dir}[/green]")
+        console.print(f"[green]✓ Piper VITS character model profile configured and ready at: {out_model_dir}[/green]")
         return out_model_dir
 
     def train_xtts(self, xtts_dataset_dir: Path) -> Optional[Path]:
