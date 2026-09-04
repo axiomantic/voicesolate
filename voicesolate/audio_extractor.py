@@ -69,6 +69,17 @@ class AudioExtractor:
             res = subprocess.run(ssh_cmd, capture_output=True, check=True)
             return res.stdout
         else:
+            exe = ffmpeg_args[0]
+            if shutil.which(exe) is None:
+                raise RuntimeError(
+                    f"Required system binary '{exe}' is not installed or not in PATH.\n"
+                    f"Installation Instructions:\n"
+                    f"  • macOS: brew install ffmpeg\n"
+                    f"  • Debian / Ubuntu: sudo apt-get update && sudo apt-get install -y ffmpeg\n"
+                    f"  • Arch Linux: sudo pacman -S ffmpeg\n"
+                    f"  • Windows: winget install Gyan.FFmpeg\n"
+                    f"  • Documentation: https://ffmpeg.org/download.html"
+                )
             res = subprocess.run(ffmpeg_args, capture_output=True, check=True)
             return res.stdout
 

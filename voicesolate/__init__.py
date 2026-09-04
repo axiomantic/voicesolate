@@ -11,9 +11,9 @@ from .cache_manager import CacheManager
 
 from .dataset_builder import DatasetBuilder
 from .model_trainer import ModelTrainer
-from .interactive_tester import InteractiveTester
+from .voice_studio_gui import VoiceStudioGUI
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 __all__ = [
     "AudioExtractor",
     "ScriptParser",
@@ -23,5 +23,5 @@ __all__ = [
     "CacheManager",
     "DatasetBuilder",
     "ModelTrainer",
-    "InteractiveTester",
+    "VoiceStudioGUI",
 ]

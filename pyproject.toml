@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "voicesolate"
-version = "0.3.0"
+version = "0.3.1"
 description = "Automated Character Dialogue Extraction, Studio Audio Isolation & End-to-End TTS Voice Training (Piper, XTTS, F5-TTS)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,6 +22,8 @@ dependencies = [
     "torch>=2.2.0",
     "torchaudio>=2.2.0",
     "gradio>=4.0.0",
+    "f5-tts>=0.1.0",
+    "piper-tts>=1.2.0",
 ]
 
 [project.scripts]

@@ -191,13 +191,25 @@ class VoiceStudioGUI:
             elif key == "piper":
                 onnx_models = list((self.models_dir / "piper").glob("*.onnx")) if (self.models_dir / "piper").exists() else []
                 if not onnx_models:
-                    return None, "⚠️ Piper LJSpeech training dataset is ready, but no compiled `.onnx` model was found in `models/piper/`."
-                
+                    return None, (
+                        "❌ **Piper ONNX Voice Model Not Compiled Yet**\n\n"
+                        f"• Dataset is ready ({self.datasets_dir / 'piper'}).\n"
+                        "• To train and export the ONNX model, see the official Piper training guide:\n"
+                        "  https://github.com/rhasspy/piper/blob/master/TRAINING.md\n"
+                        "• Once generated, place the `.onnx` and `.onnx.json` files in `models/piper/`."
+                    )
+
                 cmd = f"echo {subprocess.list2cmdline([text])} | piper --model {onnx_models[0]} --output_file {tmp_out}"
                 subprocess.run(cmd, shell=True, check=True)
                 return tmp_out, f"✅ Synthesized successfully with Piper VITS ({speed:.2f}x speed)!"
 
             elif key == "xtts":
+                if not self._is_module_available("TTS") and shutil.which("tts") is None:
+                    return None, (
+                        "❌ **Coqui XTTS-v2 is Not Installed**\n\n"
+                        "• Install Command: `pip install TTS`\n"
+                        "• Official Documentation: https://github.com/coqui-ai/TTS\n"
+                    )
                 ref_wav, _ = self.get_reference_prompt()
                 cmd = [
                     sys.executable, "-m", "TTS.bin.synthesize",

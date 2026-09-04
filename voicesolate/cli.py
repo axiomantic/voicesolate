@@ -35,9 +35,8 @@ def parse_args():
     parser.add_argument("--min-duration", type=float, default=5.0, help="Minimum clip duration in seconds (default: 5.0 to discard short utterances <= 5s, pass 0 to keep all)")
     parser.add_argument("--targets", nargs="+", default=["all"], help="Target model formats to prepare & train: 'all', 'piper', 'xtts', 'f5' (default: all)")
     parser.add_argument("--no-train", action="store_true", help="Prepare datasets only; skip model training / packaging")
-    parser.add_argument("--gui", action="store_true", default=True, help="Launch modern Voice Studio GUI in browser at the end (default: True)")
-    parser.add_argument("--tui", action="store_true", help="Launch terminal TUI instead of Web GUI")
-    parser.add_argument("--no-interactive", action="store_true", help="Skip interactive audition / studio at the end")
+    parser.add_argument("--no-web-ui", action="store_true", help="Do not launch Voice Studio Web UI at the end")
+    parser.add_argument("--no-interactive", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--no-enhance", action="store_true", help="Skip ML vocal isolation and super-resolution enhancement")
     parser.add_argument("--all-characters", action="store_true", help="Select all characters found in script")
     parser.add_argument("--no-aggregate", action="store_true", help="Do not aggregate clips from other episodes in output directory for training datasets (default: aggregates all available clips for character)")
@@ -50,7 +49,31 @@ def parse_args():
     parser.add_argument("--no-cache-script", action="store_true", help="Bypass cached script JSON and re-fetch/re-parse script")
     return parser.parse_args()
 
+def check_system_dependencies():
+    """Verifies non-python system dependencies and fails loudly with exact install instructions if missing."""
+    import shutil
+    missing = []
+    if shutil.which("ffmpeg") is None:
+        missing.append("ffmpeg")
+    if shutil.which("ffprobe") is None:
+        missing.append("ffprobe")
+
+    if missing:
+        console.print(Panel.fit(
+            f"[bold red]❌ Missing Required System Dependencies: {', '.join(missing)}[/bold red]\n\n"
+            "[yellow]Voicesolate requires FFmpeg & FFprobe for audio extraction, slicing, and stem alignment.[/yellow]\n\n"
+            "[bold white]Installation Instructions:[/bold white]\n"
+            "  • [cyan]macOS (Homebrew):[/cyan] brew install ffmpeg\n"
+            "  • [cyan]Debian / Ubuntu:[/cyan]  sudo apt-get update && sudo apt-get install -y ffmpeg\n"
+            "  • [cyan]Arch Linux:[/cyan]       sudo pacman -S ffmpeg\n"
+            "  • [cyan]Windows (Winget):[/cyan] winget install Gyan.FFmpeg\n"
+            "  • [cyan]Official Guide:[/cyan]   https://ffmpeg.org/download.html\n",
+            border_style="red"
+        ))
+        sys.exit(1)
+
 def main():
+    check_system_dependencies()
     args = parse_args()
     input_str = args.input.strip()
     
@@ -327,25 +350,11 @@ def main():
                 for model_type, model_path in trained_models.items():
                     console.print(f"[bold green]✓ {model_type.upper()} model package created:[/bold green] {model_path}")
 
-                # Interactive Audition Studio (Modern GUI or Terminal TUI)
-                if not args.no_interactive:
-                    if not args.tui:
-                        try:
-                            from .voice_studio_gui import VoiceStudioGUI
-                            gui = VoiceStudioGUI(char_dir)
-                            gui.launch(server_port=7860, inbrowser=True)
-                        except Exception as e:
-                            console.print(f"[yellow]Voice Studio GUI launch error: {e}. Falling back to terminal TUI...[/yellow]")
-                            from .interactive_tester import InteractiveTester
-                            tester = InteractiveTester(char_dir)
-                            tester.run_tui()
-                    else:
-                        try:
-                            from .interactive_tester import InteractiveTester
-                            tester = InteractiveTester(char_dir)
-                            tester.run_tui()
-                        except Exception as e:
-                            console.print(f"[yellow]Interactive audition skipped or interrupted: {e}[/yellow]")
+                # Launch Modern Voice Studio Web UI
+                if not (args.no_web_ui or args.no_interactive):
+                    from .voice_studio_gui import VoiceStudioGUI
+                    gui = VoiceStudioGUI(char_dir)
+                    gui.launch(server_port=7860, inbrowser=True)
 
 if __name__ == "__main__":
     main()
