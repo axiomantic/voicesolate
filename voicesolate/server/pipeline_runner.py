@@ -188,8 +188,8 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                 if line_idx is not None and 0 <= line_idx < len(stage_a_items):
                     for it in stage_a_items:
                         if it["state"] == "scanning":
-                            it["state"] = "pending"
-                            it["status_text"] = "Queued for STT"
+                            it["state"] = "unmatched"
+                            it["status_text"] = "Unmatched"
                     stage_a_items[line_idx]["state"] = "scanning"
                     stage_a_items[line_idx]["status_text"] = "Scanning timeline..."
 
@@ -295,10 +295,14 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
             return
 
         # Stage A Completed
+        matched_texts = {c.text.strip().lower() for c in aligned_clips}
         for it in stage_a_items:
-            if it["state"] != "matched":
+            if it["state"] == "matched" or it.get("text", "").strip().lower() in matched_texts:
                 it["state"] = "matched"
-                it["status_text"] = "Complete"
+                it["status_text"] = "Matched"
+            else:
+                it["state"] = "unmatched"
+                it["status_text"] = "Unmatched"
         job_manager.update_worker_state(
             job_id=job_id,
             worker_id="worker-stt-1",

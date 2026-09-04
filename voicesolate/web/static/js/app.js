@@ -557,6 +557,9 @@ class VoicesolateWizardApp {
 
           if (nextBtn) nextBtn.disabled = true;
           this.markStepIncomplete(2);
+
+          // Re-sample and load clean media audio waveform with cool spinny sampling animation!
+          await this.loadMacroWaveform(true);
         } catch (err) {
           console.error("Failed to clear audio cache:", err);
           alert(`Failed to clear cache: ${err.message}`);
@@ -579,18 +582,17 @@ class VoicesolateWizardApp {
     }
   }
 
-  async onEnterStep2() {
+  async loadMacroWaveform(force = false) {
     if (this.radar) {
       setTimeout(() => this.radar.resize(), 50);
     }
 
-    // Load macro-waveform for this episode if not loaded or duration is 0
     const loadingBanner = document.getElementById("waveformLoadingBanner");
     const epName = this.episodeName || (this.episodeCode ? `Episode_${this.episodeCode}` : "Current_Media");
     const durationEl = document.getElementById("radarDurationText");
     const extStatusEl = document.getElementById("step2ExtractionStatusText");
 
-    if (!this.waveformData || this.waveformData.episode !== epName || !this.waveformData.duration) {
+    if (force || !this.waveformData || this.waveformData.episode !== epName || !this.waveformData.duration) {
       if (loadingBanner) loadingBanner.style.display = "flex";
       if (durationEl) durationEl.innerText = "Sampling...";
       if (extStatusEl && (!this.alignedClips || this.alignedClips.length === 0)) {
@@ -601,13 +603,21 @@ class VoicesolateWizardApp {
       }
 
       try {
-        const wf = await api.getWaveform(epName, this.mediaPath);
-        this.waveformData = wf;
-        if (this.radar) {
-          this.radar.setData(wf);
-        }
-        if (wf && wf.duration) {
-          if (durationEl) durationEl.innerText = this.formatTime(wf.duration);
+        // Guarantee smooth animated feedback so user sees the rotating spinner & radar beam
+        const [wf] = await Promise.all([
+          api.getWaveform(epName, this.mediaPath),
+          new Promise(resolve => setTimeout(resolve, 550))
+        ]);
+
+        if (wf) {
+          wf.clips = [];
+          this.waveformData = wf;
+          if (this.radar) {
+            this.radar.setData(wf);
+          }
+          if (wf.duration && durationEl) {
+            durationEl.innerText = this.formatTime(wf.duration);
+          }
         }
         if (extStatusEl && (!this.alignedClips || this.alignedClips.length === 0)) {
           extStatusEl.innerText = "Audio radar initialized. Ready to find character dialogue.";
@@ -615,14 +625,16 @@ class VoicesolateWizardApp {
       } catch (err) {
         console.warn("Waveform not yet generated for episode:", err);
         if (this.radar) {
-          this.radar.setLoading(false);
+          this.radar.clear("Ready to search. Timeline unprobed.");
         }
       } finally {
         if (loadingBanner) loadingBanner.style.display = "none";
       }
     }
+  }
 
-    // Check if character already has clips in output
+  async onEnterStep2() {
+    await this.loadMacroWaveform(false);
     await this.checkExistingClips();
   }
 
@@ -1234,57 +1246,120 @@ class VoicesolateWizardApp {
     if (!container || !Array.isArray(items) || items.length === 0) return;
 
     container.style.display = "flex";
+
+    // Partition items into active/queued and done (matched/unmatched)
+    const queueItems = items.filter(it => it.state === "scanning" || it.state === "pending" || it.state === "idle");
+    // Place currently scanning item at top of queue
+    queueItems.sort((a, b) => (b.state === "scanning" ? 1 : 0) - (a.state === "scanning" ? 1 : 0));
+
+    const doneItems = items.filter(it => it.state === "matched" || it.state === "completed" || it.state === "unmatched");
+    const reversedDone = [...doneItems].reverse();
+
     const matchedCount = items.filter(it => it.state === "matched" || it.state === "completed").length;
+    const unmatchedCount = items.filter(it => it.state === "unmatched").length;
+
     if (summary) {
-      summary.innerText = `${matchedCount}/${items.length} matched`;
+      summary.innerText = `${matchedCount} matched • ${queueItems.length} queued`;
     }
 
     container.innerHTML = "";
-    items.forEach((item, idx) => {
-      const itemEl = document.createElement("div");
-      let stateClass = "";
-      let icon = "⏳";
-      let badgeClass = "idle";
-      let badgeLabel = "queued";
 
-      if (item.state === "scanning") {
-        stateClass = "active-scan";
-        icon = "⚡";
-        badgeClass = "scanning";
-        badgeLabel = "scanning";
-      } else if (item.state === "matched" || item.state === "completed") {
-        stateClass = "completed";
-        icon = "✓";
-        badgeClass = "matched";
-        badgeLabel = "matched";
-      }
+    // 1. ACTIVE QUEUE (Items at top of queue stay at top!)
+    if (queueItems.length > 0) {
+      const qSection = document.createElement("div");
+      qSection.style.cssText = "display:flex; flex-direction:column; gap:6px;";
 
-      itemEl.className = `queue-item ${stateClass}`;
-      const textPreview = (item.text || "").trim();
-      const shortText = textPreview.length > 34 ? textPreview.slice(0, 34) + "..." : textPreview;
-
-      itemEl.innerHTML = `
-        <div class="queue-item-header">
-          <div class="queue-item-title" title="${this.escapeHtml(textPreview)}">
-            <span>${icon}</span>
-            <span style="font-weight:600; color:#fff;">#${idx + 1}</span>
-            <span>"${this.escapeHtml(shortText)}"</span>
-          </div>
-          <span class="worker-badge ${badgeClass}">${badgeLabel}</span>
-        </div>
-        <div class="queue-item-meta">
-          <span>${item.start_sec !== undefined && item.end_sec !== undefined ? `${this.formatTime(item.start_sec)} - ${this.formatTime(item.end_sec)} (${item.duration || ''})` : (item.status_text || 'Queued')}</span>
-          <span>${item.confidence ? `${Math.round(item.confidence)}% conf` : ''}</span>
-        </div>
+      const qHeader = document.createElement("div");
+      qHeader.className = "queue-section-header";
+      qHeader.innerHTML = `
+        <span style="display:flex; align-items:center; gap:6px;">
+          <span class="spinner" style="width:10px; height:10px; border:2px solid rgba(6,182,212,0.3); border-top-color:var(--accent-cyan);"></span>
+          <span>Queue (${queueItems.length} pending)</span>
+        </span>
+        <span style="font-size:10px; color:var(--text-dim);">Top of queue</span>
       `;
+      qSection.appendChild(qHeader);
 
-      if (item.start_sec !== undefined && item.end_sec !== undefined && this.radar) {
-        itemEl.onclick = () => {
-          this.radar.highlightSegment(item.start_sec, item.end_sec);
-        };
-      }
-      container.appendChild(itemEl);
-    });
+      queueItems.forEach(item => {
+        qSection.appendChild(this._createStageAItemElement(item));
+      });
+      container.appendChild(qSection);
+    }
+
+    // 2. DONE LIST (Moved here after finishing, with matched or unmatched status)
+    if (reversedDone.length > 0) {
+      const dSection = document.createElement("div");
+      dSection.style.cssText = "display:flex; flex-direction:column; gap:6px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.08); padding-top:8px;";
+
+      const dHeader = document.createElement("div");
+      dHeader.className = "queue-section-header";
+      dHeader.innerHTML = `
+        <span style="display:flex; align-items:center; gap:6px;">
+          <span>✓ Done (${reversedDone.length})</span>
+        </span>
+        <span style="display:flex; gap:8px; font-size:10px;">
+          <span style="color:var(--accent-emerald);">${matchedCount} matched</span>
+          ${unmatchedCount > 0 ? `<span style="color:var(--text-muted);">${unmatchedCount} unmatched</span>` : ''}
+        </span>
+      `;
+      dSection.appendChild(dHeader);
+
+      reversedDone.forEach(item => {
+        dSection.appendChild(this._createStageAItemElement(item));
+      });
+      container.appendChild(dSection);
+    }
+  }
+
+  _createStageAItemElement(item) {
+    const itemEl = document.createElement("div");
+    let stateClass = "";
+    let icon = "⏳";
+    let badgeClass = "idle";
+    let badgeLabel = "queued";
+
+    if (item.state === "scanning") {
+      stateClass = "active-scan";
+      icon = "⚡";
+      badgeClass = "scanning";
+      badgeLabel = "scanning";
+    } else if (item.state === "matched" || item.state === "completed") {
+      stateClass = "completed";
+      icon = "✓";
+      badgeClass = "matched";
+      badgeLabel = "matched";
+    } else if (item.state === "unmatched") {
+      stateClass = "unmatched";
+      icon = "⚪";
+      badgeClass = "unmatched";
+      badgeLabel = "unmatched";
+    }
+
+    itemEl.className = `queue-item ${stateClass}`;
+    const textPreview = (item.text || "").trim();
+    const shortText = textPreview.length > 34 ? textPreview.slice(0, 34) + "..." : textPreview;
+
+    itemEl.innerHTML = `
+      <div class="queue-item-header">
+        <div class="queue-item-title" title="${this.escapeHtml(textPreview)}">
+          <span>${icon}</span>
+          <span style="font-weight:600; color:#fff;">Line ${item.index !== undefined ? item.index + 1 : ''}</span>
+          <span>"${this.escapeHtml(shortText)}"</span>
+        </div>
+        <span class="worker-badge ${badgeClass}">${badgeLabel}</span>
+      </div>
+      <div class="queue-item-meta">
+        <span>${item.start_sec !== undefined && item.end_sec !== undefined ? `${this.formatTime(item.start_sec)} - ${this.formatTime(item.end_sec)} (${item.duration || ''})` : (item.status_text || (item.state === 'unmatched' ? 'Unmatched in timeline' : 'Queued'))}</span>
+        <span>${item.confidence ? `${Math.round(item.confidence)}% conf` : ''}</span>
+      </div>
+    `;
+
+    if (item.start_sec !== undefined && item.end_sec !== undefined && this.radar) {
+      itemEl.onclick = () => {
+        this.radar.highlightSegment(item.start_sec, item.end_sec);
+      };
+    }
+    return itemEl;
   }
 
   renderStageBQueueItems(items) {
@@ -1294,74 +1369,134 @@ class VoicesolateWizardApp {
     if (!container || !Array.isArray(items) || items.length === 0) return;
 
     container.style.display = "flex";
-    const completedCount = items.filter(it => it.state === "matched" || it.state === "completed").length;
-    const pendingCount = items.filter(it => it.state === "pending" || it.state === "idle").length;
+
+    // Active Queue: items isolating or waiting
+    const queueItems = items.filter(it => it.state === "enhancing" || it.state === "pending" || it.state === "idle");
+    queueItems.sort((a, b) => (b.state === "enhancing" ? 1 : 0) - (a.state === "enhancing" ? 1 : 0));
+
+    // Done items: isolated, cached, or unmatched/failed
+    const doneItems = items.filter(it => it.state === "matched" || it.state === "completed" || it.state === "unmatched" || it.state === "failed");
+    const reversedDone = [...doneItems].reverse();
+
+    const isolatedCount = items.filter(it => it.state === "matched" || it.state === "completed").length;
+    const failedCount = items.filter(it => it.state === "unmatched" || it.state === "failed").length;
 
     if (summary) {
-      summary.innerText = `${completedCount}/${items.length} isolated`;
+      summary.innerText = `${isolatedCount}/${items.length} isolated • ${queueItems.length} queued`;
     }
     if (queueCountEl) {
-      queueCountEl.innerText = `${pendingCount} clips pending (${completedCount}/${items.length} done)`;
+      queueCountEl.innerText = `${queueItems.length} pending • ${isolatedCount} done`;
     }
 
     container.innerHTML = "";
-    items.forEach((item, idx) => {
-      const itemEl = document.createElement("div");
-      let stateClass = "";
-      let icon = "⏳";
-      let badgeClass = "idle";
-      let badgeLabel = "queued";
 
-      if (item.state === "enhancing") {
-        stateClass = "active";
-        icon = "⚡";
-        badgeClass = "enhancing";
-        badgeLabel = "isolating";
-      } else if (item.state === "matched" || item.state === "completed") {
-        stateClass = "completed";
-        icon = "✓";
-        badgeClass = "matched";
-        badgeLabel = (item.status_text && item.status_text.includes("Cached")) ? "cached" : "isolated";
-      }
+    // 1. ACTIVE QUEUE (Items at top of queue stay at top!)
+    if (queueItems.length > 0) {
+      const qSection = document.createElement("div");
+      qSection.style.cssText = "display:flex; flex-direction:column; gap:6px;";
 
-      itemEl.className = `queue-item ${stateClass}`;
-      const textPreview = (item.text || "").trim();
-      const shortText = textPreview.length > 32 ? textPreview.slice(0, 32) + "..." : textPreview;
-
-      itemEl.innerHTML = `
-        <div class="queue-item-header">
-          <div class="queue-item-title" title="${this.escapeHtml(textPreview)}">
-            <span>${icon}</span>
-            <span style="font-weight:600; color:#fff;">Clip ${idx + 1}</span>
-            <span>"${this.escapeHtml(shortText)}"</span>
-          </div>
-          <span class="worker-badge ${badgeClass}">${badgeLabel}</span>
-        </div>
-        <div class="queue-item-meta">
-          <span>${item.timecode || (item.start_sec !== undefined ? `${this.formatTime(item.start_sec)} - ${this.formatTime(item.end_sec)}` : '')} ${item.duration ? `(${item.duration})` : ''}</span>
-          <span>${item.status_text || ''}</span>
-        </div>
+      const qHeader = document.createElement("div");
+      qHeader.className = "queue-section-header";
+      qHeader.innerHTML = `
+        <span style="display:flex; align-items:center; gap:6px;">
+          <span class="spinner" style="width:10px; height:10px; border:2px solid rgba(6,182,212,0.3); border-top-color:var(--accent-cyan);"></span>
+          <span>Demucs Queue (${queueItems.length} pending)</span>
+        </span>
+        <span style="font-size:10px; color:var(--text-dim);">Top of queue</span>
       `;
+      qSection.appendChild(qHeader);
 
-      itemEl.onclick = () => {
-        if (item.start_sec !== undefined && this.radar) {
-          this.radar.highlightSegment(item.start_sec, item.end_sec);
-        }
-        if (item.file || item.enhanced_file) {
-          this.showClipDetails({
-            character: item.character || this.selectedCharacter,
-            text: item.text,
-            start_sec: item.start_sec,
-            end_sec: item.end_sec,
-            confidence: item.confidence || 100,
-            file: item.file,
-            enhanced_file: item.enhanced_file
-          });
-        }
-      };
+      queueItems.forEach(item => {
+        qSection.appendChild(this._createStageBItemElement(item));
+      });
+      container.appendChild(qSection);
+    }
 
-      container.appendChild(itemEl);
-    });
+    // 2. DONE LIST (Moved here after isolation with status)
+    if (reversedDone.length > 0) {
+      const dSection = document.createElement("div");
+      dSection.style.cssText = "display:flex; flex-direction:column; gap:6px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.08); padding-top:8px;";
+
+      const dHeader = document.createElement("div");
+      dHeader.className = "queue-section-header";
+      dHeader.innerHTML = `
+        <span style="display:flex; align-items:center; gap:6px;">
+          <span>✓ Done (${reversedDone.length})</span>
+        </span>
+        <span style="display:flex; gap:8px; font-size:10px;">
+          <span style="color:var(--accent-emerald);">${isolatedCount} isolated</span>
+          ${failedCount > 0 ? `<span style="color:var(--accent-rose);">${failedCount} failed</span>` : ''}
+        </span>
+      `;
+      dSection.appendChild(dHeader);
+
+      reversedDone.forEach(item => {
+        dSection.appendChild(this._createStageBItemElement(item));
+      });
+      container.appendChild(dSection);
+    }
+  }
+
+  _createStageBItemElement(item) {
+    const itemEl = document.createElement("div");
+    let stateClass = "";
+    let icon = "⏳";
+    let badgeClass = "idle";
+    let badgeLabel = "queued";
+
+    if (item.state === "enhancing") {
+      stateClass = "active";
+      icon = "⚡";
+      badgeClass = "enhancing";
+      badgeLabel = "isolating";
+    } else if (item.state === "matched" || item.state === "completed") {
+      stateClass = "completed";
+      icon = "✓";
+      badgeClass = "matched";
+      badgeLabel = (item.status_text && item.status_text.includes("Cached")) ? "cached" : "isolated";
+    } else if (item.state === "unmatched" || item.state === "failed") {
+      stateClass = "unmatched";
+      icon = "❌";
+      badgeClass = "unmatched";
+      badgeLabel = "unmatched";
+    }
+
+    itemEl.className = `queue-item ${stateClass}`;
+    const textPreview = (item.text || "").trim();
+    const shortText = textPreview.length > 32 ? textPreview.slice(0, 32) + "..." : textPreview;
+
+    itemEl.innerHTML = `
+      <div class="queue-item-header">
+        <div class="queue-item-title" title="${this.escapeHtml(textPreview)}">
+          <span>${icon}</span>
+          <span style="font-weight:600; color:#fff;">Clip ${item.timecode || ''}</span>
+          <span>"${this.escapeHtml(shortText)}"</span>
+        </div>
+        <span class="worker-badge ${badgeClass}">${badgeLabel}</span>
+      </div>
+      <div class="queue-item-meta">
+        <span>${item.timecode || (item.start_sec !== undefined ? `${this.formatTime(item.start_sec)} - ${this.formatTime(item.end_sec)}` : '')} ${item.duration ? `(${item.duration})` : ''}</span>
+        <span>${item.status_text || ''}</span>
+      </div>
+    `;
+
+    itemEl.onclick = () => {
+      if (item.start_sec !== undefined && this.radar) {
+        this.radar.highlightSegment(item.start_sec, item.end_sec);
+      }
+      if (item.file || item.enhanced_file) {
+        this.showClipDetails({
+          character: item.character || this.selectedCharacter,
+          text: item.text,
+          start_sec: item.start_sec,
+          end_sec: item.end_sec,
+          confidence: item.confidence || 100,
+          file: item.file,
+          enhanced_file: item.enhanced_file
+        });
+      }
+    };
+    return itemEl;
   }
 
   updateSTTWorkerUI(worker) {

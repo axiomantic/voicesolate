@@ -221,17 +221,36 @@ export class WaveformRadar {
       ctx.fill();
       ctx.stroke();
 
-      // Pulsing indicator dot inside pill
-      const pulseOpacity = (Math.sin(now * 5) + 1) / 2;
-      ctx.fillStyle = `rgba(6, 182, 212, ${0.4 + 0.6 * pulseOpacity})`;
+      // Rotating sleek spinner ring inside pill ("spinny")
+      const spinnerAngle = now * 7;
+      const spinX = pillX + 22;
+      const spinY = midY;
+
+      // Outer subtle ring
+      ctx.strokeStyle = "rgba(6, 182, 212, 0.25)";
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.arc(pillX + 22, midY, 5, 0, Math.PI * 2);
+      ctx.arc(spinX, spinY, 8, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Spinning highlight arc
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(spinX, spinY, 8, spinnerAngle, spinnerAngle + Math.PI * 1.3);
+      ctx.stroke();
+
+      // Pulsing center glowing core
+      const pulseOpacity = (Math.sin(now * 5) + 1) / 2;
+      ctx.fillStyle = `rgba(6, 182, 212, ${0.5 + 0.5 * pulseOpacity})`;
+      ctx.beginPath();
+      ctx.arc(spinX, spinY, 3, 0, Math.PI * 2);
       ctx.fill();
 
       // Loading text
       ctx.fillStyle = "#f8fafc";
       ctx.font = "600 13px ui-sans-serif, system-ui, sans-serif";
-      ctx.fillText(msg, pillX + 38, midY + 4);
+      ctx.fillText(msg, pillX + 40, midY + 4);
 
       return;
     }

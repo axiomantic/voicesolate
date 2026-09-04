@@ -511,6 +511,30 @@ body {
   background: rgba(16, 185, 129, 0.04);
 }
 
+.queue-item.unmatched {
+  border-color: rgba(148, 163, 184, 0.12);
+  background: rgba(15, 23, 42, 0.4);
+  opacity: 0.65;
+}
+
+.queue-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 4px 2px 2px 2px;
+}
+
+.worker-badge.unmatched {
+  background: rgba(100, 116, 139, 0.2);
+  color: var(--text-muted);
+  border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
 .queue-item-header {
   display: flex;
   justify-content: space-between;
