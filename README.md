@@ -68,7 +68,7 @@ voicesolate -i "path/to/movie.mkv"
 | `-s, --script` | Script path (`.txt`, `.json`, `.srt`), or web URL | Auto-detected from video subtitles |
 | `--provider` | Optional script provider (e.g. `startrek`) | `None` |
 | `-o, --output-dir` | Directory where audio clips and manifest are saved | `./output` |
-| `--min-duration` | Discard audio clips shorter than N seconds (e.g. `5.0`) | `0.0` (keep all) |
+| `--min-duration` | Discard audio clips shorter than N seconds (pass `0` to keep all) | `5.0` (discards <= 5s) |
 | `--no-enhance` | Skip neural Demucs isolation (export discrete raw slices) | `False` |
 | `--wyoming-host` | Optional Wyoming Whisper STT IP | `10.0.2.141` |
 | `--wyoming-port` | Optional Wyoming Whisper STT Port | `10300` |

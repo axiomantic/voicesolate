@@ -260,14 +260,27 @@ class SearchAligner:
             # Sliding window search over word timestamp stream
             for win_size in range(max(1, L - 2), min(len(whisper_words) + 1, L + 4)):
                 for i in range(len(whisper_words) - win_size + 1):
-                    cand_phrase = " ".join(w["clean"] for w in whisper_words[i:i+win_size])
-                    score = fuzz.ratio(target_phrase, cand_phrase)
-                    
-                    # Prioritize matches closest to original anchor
+                    cand_words = [cw["clean"] for cw in whisper_words[i:i+win_size]]
+                    score = fuzz.ratio(target_phrase, " ".join(cand_words))
+
+                    # Exact boundary alignment bonuses:
+                    first_match = (cand_words[0] == target_words[0])
+                    last_match = (cand_words[-1] == target_words[-1])
+
+                    bonus = 0.0
+                    if first_match:
+                        bonus += 3.0
+                    if last_match:
+                        bonus += 5.0
+                    # Heavily penalize candidate spans that overshoot past the target's last word
+                    if not last_match and target_words[-1] in cand_words[:-1]:
+                        bonus -= 12.0
+
+                    # Proximity to original anchor (mild tie-breaker only)
                     span_mid = (whisper_words[i]["start"] + whisper_words[i+win_size-1]["end"]) / 2.0
                     anchor_mid = (start_sec + end_sec) / 2.0
                     time_dist = abs(span_mid - anchor_mid)
-                    adjusted_score = score - (time_dist * 2.0)
+                    adjusted_score = score + bonus - (time_dist * 0.5)
 
                     if adjusted_score > best_score:
                         best_score = adjusted_score

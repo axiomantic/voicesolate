@@ -30,7 +30,7 @@ def parse_args():
     parser.add_argument("-c", "--character", nargs="+", default=None, help="Specific character(s) to export (bypasses interactive TUI)")
     parser.add_argument("--wyoming-host", default="10.0.2.141", help="Wyoming STT server IP/hostname (default: 10.0.2.141)")
     parser.add_argument("--wyoming-port", type=int, default=10300, help="Wyoming STT server port (default: 10300)")
-    parser.add_argument("--min-duration", type=float, default=0.0, help="Minimum clip duration in seconds (e.g. 5.0 to discard short utterances <= 5s)")
+    parser.add_argument("--min-duration", type=float, default=5.0, help="Minimum clip duration in seconds (default: 5.0 to discard short utterances <= 5s, pass 0 to keep all)")
     parser.add_argument("--no-enhance", action="store_true", help="Skip ML vocal isolation and super-resolution enhancement")
     parser.add_argument("--all-characters", action="store_true", help="Select all characters found in script")
     return parser.parse_args()
