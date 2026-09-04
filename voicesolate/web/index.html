@@ -281,6 +281,16 @@
                 <span style="font-size:11px; color:var(--text-dim);">(discards clips shorter than this; 0 keeps all)</span>
               </div>
 
+              <!-- STT Workers Option -->
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label for="step2SttWorkers" style="font-size:13px; font-weight:600; color:#fff; white-space:nowrap;">
+                  STT Workers:
+                </label>
+                <div style="display:flex; align-items:center; gap:4px;">
+                  <input type="number" id="step2SttWorkers" class="form-input" min="1" max="8" step="1" value="2" style="width:60px; padding:6px 8px; font-size:13px; text-align:center;" />
+                </div>
+              </div>
+
               <!-- Demucs Workers Option -->
               <div style="display:flex; align-items:center; gap:8px;">
                 <label for="step2DemucsWorkers" style="font-size:13px; font-weight:600; color:#fff; white-space:nowrap;">
@@ -361,6 +371,14 @@
                     </div>
                     <div style="font-size:12px; color:var(--text-muted);" id="sttWorkerSnippet-worker-stt-1">Awaiting extraction start...</div>
                     <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);" id="sttWorkerTime-worker-stt-1">--:--</div>
+                  </div>
+                  <div class="worker-card" id="sttWorkerCard-worker-stt-2">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                      <span style="font-weight:600; color:#fff;">worker-stt-2</span>
+                      <span class="worker-badge idle" id="sttWorkerBadge-worker-stt-2">idle</span>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted);" id="sttWorkerSnippet-worker-stt-2">Awaiting extraction start...</div>
+                    <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);" id="sttWorkerTime-worker-stt-2">--:--</div>
                   </div>
                 </div>
                 <!-- Stage A Itemized Queue -->

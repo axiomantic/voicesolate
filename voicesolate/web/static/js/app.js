@@ -519,12 +519,20 @@ class VoicesolateWizardApp {
           if (cursorTimeEl) cursorTimeEl.innerText = "0:00";
 
           // Reset worker telemetry cards
-          const sttBadge = document.getElementById("sttWorkerBadge-worker-stt-1");
-          const sttSnippet = document.getElementById("sttWorkerSnippet-worker-stt-1");
-          const sttTime = document.getElementById("sttWorkerTime-worker-stt-1");
-          if (sttBadge) { sttBadge.className = "worker-badge idle"; sttBadge.innerText = "idle"; }
-          if (sttSnippet) { sttSnippet.innerText = "Awaiting extraction start..."; }
-          if (sttTime) { sttTime.innerText = "--:--"; }
+          const sttWorkersCount = parseInt(document.getElementById("step2SttWorkers")?.value) || 2;
+          const sttContainer = document.getElementById("radarWorkersContainer");
+          if (sttContainer) {
+            sttContainer.innerHTML = "";
+            for (let i = 1; i <= sttWorkersCount; i++) {
+              this.updateSTTWorkerUI({
+                worker_id: `worker-stt-${i}`,
+                state: "idle",
+                snippet: "Awaiting extraction start...",
+                chunk_start: 0,
+                chunk_end: 0
+              });
+            }
+          }
 
           const demucsWorkersCount = parseInt(document.getElementById("step2DemucsWorkers")?.value) || 2;
           const demucsContainer = document.getElementById("enhancementWorkersContainer");
@@ -579,6 +587,26 @@ class VoicesolateWizardApp {
 
     if (startBtn) {
       startBtn.addEventListener("click", () => this.startAudioSearch());
+    }
+
+    const sttWorkersInput = document.getElementById("step2SttWorkers");
+    if (sttWorkersInput) {
+      sttWorkersInput.addEventListener("input", () => {
+        const count = Math.max(1, Math.min(8, parseInt(sttWorkersInput.value) || 2));
+        const sttContainer = document.getElementById("radarWorkersContainer");
+        if (sttContainer) {
+          sttContainer.innerHTML = "";
+          for (let i = 1; i <= count; i++) {
+            this.updateSTTWorkerUI({
+              worker_id: `worker-stt-${i}`,
+              state: "idle",
+              snippet: "Awaiting extraction start...",
+              chunk_start: 0,
+              chunk_end: 0
+            });
+          }
+        }
+      });
     }
 
     const demucsWorkersInput = document.getElementById("step2DemucsWorkers");
@@ -721,12 +749,22 @@ class VoicesolateWizardApp {
     if (statusText) statusText.innerText = "⏳ Queuing divide-and-conquer search...";
 
     // Activate Stage A and Stage B worker telemetry cards
-    const sttBadge = document.getElementById("sttWorkerBadge-worker-stt-1");
-    const sttSnippet = document.getElementById("sttWorkerSnippet-worker-stt-1");
-    const sttTime = document.getElementById("sttWorkerTime-worker-stt-1");
-    if (sttBadge) { sttBadge.className = "worker-badge scanning"; sttBadge.innerText = "scanning"; }
-    if (sttSnippet) { sttSnippet.innerText = "Initializing divide-and-conquer speech search..."; }
-    if (sttTime) { sttTime.innerText = "Timeline: 0:00..."; }
+    const sttWorkersInput = document.getElementById("step2SttWorkers");
+    const sttWorkers = sttWorkersInput ? Math.max(1, Math.min(8, parseInt(sttWorkersInput.value) || 2)) : 2;
+
+    const sttContainer = document.getElementById("radarWorkersContainer");
+    if (sttContainer) {
+      sttContainer.innerHTML = "";
+      for (let i = 1; i <= sttWorkers; i++) {
+        this.updateSTTWorkerUI({
+          worker_id: `worker-stt-${i}`,
+          state: "scanning",
+          snippet: "Initializing divide-and-conquer speech search...",
+          chunk_start: 0,
+          chunk_end: 0
+        });
+      }
+    }
 
     const demucsWorkersInput = document.getElementById("step2DemucsWorkers");
     const demucsWorkers = demucsWorkersInput ? Math.max(1, Math.min(8, parseInt(demucsWorkersInput.value) || 2)) : 2;
@@ -770,6 +808,7 @@ class VoicesolateWizardApp {
         characters: [this.selectedCharacter],
         min_duration: minDuration,
         similarity_threshold: similarityThreshold,
+        stt_workers: sttWorkers,
         demucs_workers: demucsWorkers,
         enhance: enhance,
         no_cache_stt: noCacheStt,

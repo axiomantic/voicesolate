@@ -1,6 +1,9 @@
 import os
 import re
 import time
+import math
+import threading
+import concurrent.futures
 from typing import List, Dict, Optional, Tuple, Any
 from dataclasses import dataclass, asdict
 from rapidfuzz import fuzz
@@ -29,28 +32,30 @@ class SubtitleAnchor:
 
 class SearchAligner:
     """
-    Automated Hierarchical STT Alignment Engine.
-    Uses whole-span Levenshtein subtitle candidate matching, expanded context windows,
-    sub-second Whisper word-level timestamps, and persistent multi-tier caching.
+    Two-Stage Divide-and-Conquer Monotonic Alignment Pipeline:
+    1. Monotonic Levenshtein Subtitle Anchor Scan.
+    2. Zero-Loss Partial STT / Word Boundary Refinement.
     """
 
-    def __init__(self, audio_extractor: AudioExtractor, stt_client: Optional[WyomingSTTClient] = None, cache_manager: Optional[CacheManager] = None):
-        self.extractor = audio_extractor
-        self.stt_client = stt_client
-        self.duration = audio_extractor.get_duration()
+    def __init__(self, extractor: AudioExtractor, wyoming_client: Optional[WyomingSTTClient] = None, cache_manager: Optional[CacheManager] = None):
+        self.extractor = extractor
+        self.wyoming = wyoming_client
         self.cache = cache_manager or CacheManager()
-        self.media_key = self.cache.get_media_key(audio_extractor.raw_path)
+        self.duration = self.extractor.get_duration()
+        self.media_key = self.cache.get_media_key(self.extractor.raw_path)
         self._local_whisper = None
+        self._whisper_lock = threading.Lock()
 
     def _get_local_whisper(self):
         """Lazy loader for local faster-whisper model."""
-        if self._local_whisper is None:
-            try:
-                from faster_whisper import WhisperModel
-                self._local_whisper = WhisperModel("base", device="cpu", compute_type="int8")
-            except Exception as e:
-                print(f"Notice: local faster-whisper not available ({e}), using Wyoming STT fallback.")
-        return self._local_whisper
+        with self._whisper_lock:
+            if self._local_whisper is None:
+                try:
+                    from faster_whisper import WhisperModel
+                    self._local_whisper = WhisperModel("base", device="cpu", compute_type="int8")
+                except Exception as e:
+                    print(f"Notice: local faster-whisper not available ({e}), using Wyoming STT fallback.")
+            return self._local_whisper
 
     def format_timecode(self, seconds: float) -> str:
         """Formats seconds into HH_MM_SS_mmm."""
@@ -95,12 +100,14 @@ class SearchAligner:
         subtitles_path: Optional[str] = None,
         script_id: str = "default",
         similarity_threshold: float = 55.0,
+        num_workers: int = 1,
         progress: Optional[Progress] = None,
         callback: Optional[Any] = None
     ) -> List[AlignedClip]:
         """
-        Whole-Span Monotonic Levenshtein Alignment across Subtitles & Audio.
+        Divide-and-Conquer Whole-Span Monotonic Levenshtein Alignment across Subtitles & Audio.
         Checks persistent alignment cache first for zero-latency instant re-runs.
+        Supports parallel STT worker partitions across the target screenplay lines.
         """
         # Check alignment cache
         cached_clips = []
@@ -127,7 +134,9 @@ class SearchAligner:
         target_chars_set = set(c.upper() for c in target_characters)
         target_lines = [l for l in all_script_lines if l.character.upper() in target_chars_set]
 
-        aligned_clips: List[AlignedClip] = []
+        if not target_lines:
+            return []
+
         anchors = self.parse_srt_anchors(subtitles_path) if subtitles_path else []
 
         task_id = None
@@ -137,98 +146,136 @@ class SearchAligner:
                 total=len(target_lines)
             )
 
-        last_anchor_idx = 0
+        def run_worker_partition(worker_idx: int, line_slice: List[Tuple[int, DialogueLine]], start_anchor_hint: int) -> List[AlignedClip]:
+            worker_id = f"worker-stt-{worker_idx + 1}"
+            last_anchor_idx = start_anchor_hint
+            worker_clips: List[AlignedClip] = []
 
-        for line_idx, target in enumerate(target_lines):
-            target_text = target.text.strip()
-            target_clean = target_text.lower()
-            words = target_clean.split()
-            num_words = len(words)
+            for line_idx, target in line_slice:
+                target_text = target.text.strip()
+                target_clean = target_text.lower()
+                words = target_clean.split()
+                num_words = len(words)
 
-            if progress and task_id is not None:
-                trunc = (target_text[:30] + "...") if len(target_text) > 30 else target_text
-                progress.update(
-                    task_id,
-                    description=f"[cyan]Aligning [{line_idx+1}/{len(target_lines)}] {target.character}: \"{trunc}\""
-                )
+                if progress and task_id is not None:
+                    trunc = (target_text[:30] + "...") if len(target_text) > 30 else target_text
+                    progress.update(
+                        task_id,
+                        description=f"[cyan][{worker_id}] Aligning [{line_idx+1}/{len(target_lines)}] {target.character}: \"{trunc}\""
+                    )
 
-            best_start = None
-            best_end = None
-            best_score = 0.0
+                best_start = None
+                best_end = None
+                best_score = 0.0
 
-            # 1. Search forward monotonically from last_anchor_idx first
-            search_ranges = [
-                range(last_anchor_idx, min(len(anchors), last_anchor_idx + 80)),
-                range(0, len(anchors)) # Fallback if missed in local forward window
-            ]
+                search_ranges = [
+                    range(last_anchor_idx, min(len(anchors), last_anchor_idx + 80)),
+                    range(0, len(anchors)) # Fallback if missed in local forward window
+                ]
 
-            for s_range in search_ranges:
-                for start_i in s_range:
-                    max_lookahead = min(len(anchors), start_i + max(3, num_words // 3 + 3))
-                    accum = ""
-                    for end_i in range(start_i, max_lookahead):
-                        accum += (" " if accum else "") + anchors[end_i].text.lower()
-                        if num_words <= 4:
-                            score = fuzz.ratio(target_clean, accum)
-                        else:
-                            score = max(fuzz.token_sort_ratio(target_clean, accum), fuzz.ratio(target_clean, accum))
+                for s_range in search_ranges:
+                    for start_i in s_range:
+                        max_lookahead = min(len(anchors), start_i + max(3, num_words // 3 + 3))
+                        accum = ""
+                        for end_i in range(start_i, max_lookahead):
+                            accum += (" " if accum else "") + anchors[end_i].text.lower()
+                            if num_words <= 4:
+                                score = fuzz.ratio(target_clean, accum)
+                            else:
+                                score = max(fuzz.token_sort_ratio(target_clean, accum), fuzz.ratio(target_clean, accum))
 
-                        if score > best_score:
-                            best_score = score
-                            best_start = start_i
-                            best_end = end_i
+                            if score > best_score:
+                                best_score = score
+                                best_start = start_i
+                                best_end = end_i
 
-                if best_score >= similarity_threshold:
-                    break
+                    if best_score >= similarity_threshold:
+                        break
 
-            if callback and anchors and last_anchor_idx < len(anchors):
-                est_start = anchors[min(last_anchor_idx, len(anchors)-1)].start_sec
-                callback({
-                    "type": "worker_scan",
-                    "start_sec": est_start,
-                    "end_sec": min(self.duration, est_start + 15.0),
-                    "target_text": target_text,
-                    "character": target.character,
-                    "index": line_idx,
-                    "total": len(target_lines)
-                })
-
-            if best_start is not None and best_score >= similarity_threshold:
-                raw_start = anchors[best_start].start_sec
-                raw_end = anchors[best_end].end_sec
-
-                # Update cursor
-                last_anchor_idx = best_end + 1
-
-                # 2. Refine boundaries with context window + word-level timestamps
-                refined_start, refined_end, conf = self._refine_boundaries_with_stt(
-                    raw_start, raw_end, target_text
-                )
-
-                timecode = f"{self.format_timecode(refined_start)}-{self.format_timecode(refined_end)}"
-                clip_obj = AlignedClip(
-                    character=target.character,
-                    text=target.text,
-                    start_sec=refined_start,
-                    end_sec=refined_end,
-                    confidence=conf,
-                    timecode_str=timecode
-                )
-                aligned_clips.append(clip_obj)
-
-                if callback:
+                if callback and anchors:
+                    a_idx = min(last_anchor_idx, len(anchors) - 1) if last_anchor_idx < len(anchors) else (len(anchors) - 1)
+                    est_start = anchors[a_idx].start_sec
                     callback({
-                        "type": "clip_matched",
-                        "start_sec": refined_start,
-                        "end_sec": refined_end,
-                        "confidence": conf,
+                        "type": "worker_scan",
+                        "worker_id": worker_id,
+                        "start_sec": est_start,
+                        "end_sec": min(self.duration, est_start + 15.0),
+                        "target_text": target_text,
                         "character": target.character,
-                        "text": target.text,
-                        "clip": clip_obj
+                        "index": line_idx,
+                        "total": len(target_lines)
                     })
 
-            if progress and task_id is not None:
-                progress.advance(task_id, 1)
+                if best_start is not None and best_score >= similarity_threshold:
+                    raw_start = anchors[best_start].start_sec
+                    raw_end = anchors[best_end].end_sec
+
+                    last_anchor_idx = best_end + 1
+
+                    refined_start, refined_end, conf = self._refine_boundaries_with_stt(
+                        raw_start, raw_end, target_text
+                    )
+
+                    timecode = f"{self.format_timecode(refined_start)}-{self.format_timecode(refined_end)}"
+                    clip_obj = AlignedClip(
+                        character=target.character,
+                        text=target.text,
+                        start_sec=refined_start,
+                        end_sec=refined_end,
+                        confidence=conf,
+                        timecode_str=timecode
+                    )
+                    worker_clips.append(clip_obj)
+
+                    if callback:
+                        callback({
+                            "type": "clip_matched",
+                            "worker_id": worker_id,
+                            "start_sec": refined_start,
+                            "end_sec": refined_end,
+                            "confidence": conf,
+                            "character": target.character,
+                            "text": target.text,
+                            "clip": clip_obj
+                        })
+
+                if progress and task_id is not None:
+                    progress.advance(task_id, 1)
+
+            return worker_clips
+
+        effective_workers = max(1, min(num_workers, len(target_lines)))
+        aligned_clips: List[AlignedClip] = []
+
+        if effective_workers <= 1:
+            all_indexed = list(enumerate(target_lines))
+            aligned_clips = run_worker_partition(0, all_indexed, 0)
+        else:
+            chunk_size = math.ceil(len(target_lines) / effective_workers)
+            futures = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=effective_workers) as executor:
+                for w_i in range(effective_workers):
+                    start_i = w_i * chunk_size
+                    end_i = min(len(target_lines), (w_i + 1) * chunk_size)
+                    line_slice = [(i, target_lines[i]) for i in range(start_i, end_i)]
+                    if not line_slice:
+                        continue
+                    anchor_hint = int((w_i / effective_workers) * len(anchors)) if anchors else 0
+                    futures.append(executor.submit(run_worker_partition, w_i, line_slice, anchor_hint))
+
+                for f in futures:
+                    aligned_clips.extend(f.result())
+
+        # Sort clips chronologically and deduplicate
+        aligned_clips.sort(key=lambda c: c.start_sec)
+        seen_spans = set()
+        unique_clips = []
+        for c in aligned_clips:
+            span_key = (round(c.start_sec, 2), round(c.end_sec, 2), c.character.upper())
+            if span_key not in seen_spans:
+                seen_spans.add(span_key)
+                unique_clips.append(c)
+        aligned_clips = unique_clips
 
         # Save to persistent alignment cache
         for char in target_characters:

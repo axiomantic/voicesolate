@@ -1,6 +1,7 @@
 import os
 import json
 import hashlib
+import threading
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
@@ -43,6 +44,7 @@ class CacheManager:
         self.use_cache_audio = use_cache_audio
         self.use_cache_enhance = use_cache_enhance
         self.use_cache_script = use_cache_script
+        self._lock = threading.Lock()
 
     def get_media_key(self, media_path: str) -> str:
         """Generates a consistent filesystem-safe cache key for any media file or URL."""
@@ -67,13 +69,14 @@ class CacheManager:
         return {}
 
     def save_stt_entry(self, media_key: str, window_key: str, data: Dict[str, Any]):
-        cache = self.load_stt_cache(media_key)
-        if "windows" not in cache:
-            cache["windows"] = {}
-        cache["windows"][window_key] = data
-        p = self.get_stt_cache_path(media_key)
-        with open(p, "w", encoding="utf-8") as f:
-            json.dump(cache, f, indent=2)
+        with self._lock:
+            cache = self.load_stt_cache(media_key)
+            if "windows" not in cache:
+                cache["windows"] = {}
+            cache["windows"][window_key] = data
+            p = self.get_stt_cache_path(media_key)
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(cache, f, indent=2)
 
     def get_stt_entry(self, media_key: str, window_key: str) -> Optional[Dict[str, Any]]:
         if not self.use_cache_stt:

@@ -190,6 +190,7 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
         enhancer = AudioEnhancer(cache_manager=cache_manager) if do_enhance else None
 
         num_demucs_workers = max(1, min(8, int(params.get("demucs_workers", 2))))
+        num_stt_workers = max(1, min(8, int(params.get("stt_workers", 2))))
 
         # Initialize Demucs worker telemetry cards
         for w_idx in range(1, num_demucs_workers + 1):
@@ -202,6 +203,19 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                 snippet="Awaiting matched dialogue...",
                 queue_count=0,
                 queue_items=stage_b_items
+            )
+
+        # Initialize STT worker telemetry cards
+        for s_idx in range(1, num_stt_workers + 1):
+            job_manager.update_worker_state(
+                job_id=job_id,
+                worker_id=f"worker-stt-{s_idx}",
+                state="idle",
+                chunk_start=0.0,
+                chunk_end=0.0,
+                snippet="Awaiting search start...",
+                queue_count=len(stage_a_items),
+                queue_items=stage_a_items
             )
 
         def demucs_worker_loop(w_id: str):
@@ -385,17 +399,13 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
 
         # Worker state reporter
         def on_align_step(step_info: Dict[str, Any]):
-            worker_id = "worker-stt-1"
+            worker_id = step_info.get("worker_id", "worker-stt-1")
             stype = step_info.get("type", "worker_scan")
             if stype == "worker_scan":
                 line_idx = step_info.get("index")
                 if line_idx is not None and 0 <= line_idx < len(stage_a_items):
-                    for it in stage_a_items:
-                        if it["state"] == "scanning":
-                            it["state"] = "unmatched"
-                            it["status_text"] = "Unmatched"
                     stage_a_items[line_idx]["state"] = "scanning"
-                    stage_a_items[line_idx]["status_text"] = "Scanning timeline..."
+                    stage_a_items[line_idx]["status_text"] = f"Scanning ({worker_id})..."
 
                 job_manager.update_worker_state(
                     job_id=job_id,
@@ -410,7 +420,7 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
             elif stype == "clip_matched":
                 text_matched = step_info.get("text", "").strip()
                 for it in stage_a_items:
-                    if it["text"].strip() == text_matched or it["state"] == "scanning":
+                    if it["text"].strip() == text_matched or (it["state"] == "scanning" and it["status_text"].startswith(f"Scanning ({worker_id})")):
                         it["state"] = "matched"
                         it["status_text"] = "Matched"
                         it["start_sec"] = step_info.get("start_sec")
@@ -449,30 +459,32 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                 for it in stage_a_items:
                     it["state"] = "matched"
                     it["status_text"] = "Cached alignment"
-                job_manager.update_worker_state(
-                    job_id=job_id,
-                    worker_id=worker_id,
-                    state="matched",
-                    chunk_start=0.0,
-                    chunk_end=0.0,
-                    snippet=f"Loaded {step_info.get('count', 0)} cached speech alignments",
-                    queue_count=0,
-                    queue_items=stage_a_items
-                )
+                for s_i in range(1, num_stt_workers + 1):
+                    job_manager.update_worker_state(
+                        job_id=job_id,
+                        worker_id=f"worker-stt-{s_i}",
+                        state="matched",
+                        chunk_start=0.0,
+                        chunk_end=0.0,
+                        snippet=f"Loaded {step_info.get('count', 0)} cached speech alignments",
+                        queue_count=0,
+                        queue_items=stage_a_items
+                    )
                 for c in step_info.get("clips", []):
                     enqueue_clip_to_stage_b(c)
 
-        # Signal STT Worker starting search
-        job_manager.update_worker_state(
-            job_id=job_id,
-            worker_id="worker-stt-1",
-            state="scanning" if stage_a_items else "idle",
-            chunk_start=0.0,
-            chunk_end=15.0,
-            snippet=f"Starting search for {', '.join(target_chars)} ({len(stage_a_items)} items)...",
-            queue_count=len(stage_a_items),
-            queue_items=stage_a_items
-        )
+        # Signal STT Workers starting search
+        for s_i in range(1, num_stt_workers + 1):
+            job_manager.update_worker_state(
+                job_id=job_id,
+                worker_id=f"worker-stt-{s_i}",
+                state="scanning" if stage_a_items else "idle",
+                chunk_start=0.0,
+                chunk_end=15.0,
+                snippet=f"Starting search across {num_stt_workers} workers...",
+                queue_count=len(stage_a_items),
+                queue_items=stage_a_items
+            )
 
         similarity_thresh = float(params.get("similarity_threshold", 55.0))
         aligned_clips = aligner.align_character_dialogue(
@@ -481,6 +493,7 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
             subtitles_path=active_subs,
             script_id=parser.script_id,
             similarity_threshold=similarity_thresh,
+            num_workers=num_stt_workers,
             callback=on_align_step
         )
 
@@ -491,16 +504,17 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
             for t in demucs_threads:
                 t.join()
 
-            job_manager.update_worker_state(
-                job_id=job_id,
-                worker_id="worker-stt-1",
-                state="idle",
-                chunk_start=0.0,
-                chunk_end=0.0,
-                snippet="No matching dialogue found",
-                queue_count=0,
-                queue_items=stage_a_items
-            )
+            for s_i in range(1, num_stt_workers + 1):
+                job_manager.update_worker_state(
+                    job_id=job_id,
+                    worker_id=f"worker-stt-{s_i}",
+                    state="idle",
+                    chunk_start=0.0,
+                    chunk_end=0.0,
+                    snippet="No matching dialogue found",
+                    queue_count=0,
+                    queue_items=stage_a_items
+                )
             job_manager.update_job(
                 job_id,
                 progress=100.0,
@@ -519,16 +533,18 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
             else:
                 it["state"] = "unmatched"
                 it["status_text"] = "Unmatched"
-        job_manager.update_worker_state(
-            job_id=job_id,
-            worker_id="worker-stt-1",
-            state="matched",
-            chunk_start=0.0,
-            chunk_end=0.0,
-            snippet=f"Matched {len(aligned_clips)} speech instances",
-            queue_count=0,
-            queue_items=stage_a_items
-        )
+
+        for s_i in range(1, num_stt_workers + 1):
+            job_manager.update_worker_state(
+                job_id=job_id,
+                worker_id=f"worker-stt-{s_i}",
+                state="matched",
+                chunk_start=0.0,
+                chunk_end=0.0,
+                snippet=f"Matched {len(aligned_clips)} speech instances",
+                queue_count=0,
+                queue_items=stage_a_items
+            )
 
         job_manager.update_job(
             job_id,
