@@ -50,23 +50,19 @@
     </div>
   </header>
 
-  <!-- Stage Navigation Tabs -->
+  <!-- Stage Navigation Tabs in Sequential Pipeline Order -->
   <nav class="tabs-nav">
-    <button class="tab-btn active" data-tab="tab-studio">
-      <span>🎙️</span>
-      <span>Voice Studio</span>
-    </button>
-    <button class="tab-btn" data-tab="tab-radar">
+    <button class="tab-btn active" data-tab="tab-radar">
       <span>🌊</span>
-      <span>Audio Radar &amp; Waveform</span>
+      <span>1. Divide-and-Conquer Audio Radar</span>
     </button>
     <button class="tab-btn" data-tab="tab-engines">
       <span>🧬</span>
-      <span>Datasets &amp; Engines</span>
+      <span>2. Datasets &amp; Voice Engines</span>
     </button>
-    <button class="tab-btn" data-tab="tab-pipeline">
-      <span>🛰️</span>
-      <span>Pipeline &amp; Ingestion</span>
+    <button class="tab-btn" data-tab="tab-studio">
+      <span>🎙️</span>
+      <span>3. Voice Synthesis Studio</span>
     </button>
   </nav>
 
@@ -89,11 +85,182 @@
     </div>
   </div>
 
-  <!-- Main Content Areas -->
+  <!-- Main Pipeline Stages -->
   <main class="main-content">
 
-    <!-- TAB 1: VOICE STUDIO -->
-    <section id="tab-studio" class="tab-pane active">
+    <!-- STAGE 1: DIVIDE-AND-CONQUER AUDIO RADAR & INGESTION -->
+    <section id="tab-radar" class="tab-pane active">
+      
+      <!-- Ingestion & Source Card -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">🛰️ Media Ingestion &amp; Dialogue Mining</h2>
+            <p class="card-subtitle">Zero-download remote SFTP/SSH chunk seeking or local file ingestion</p>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <!-- Quick Preset Chips -->
+          <div>
+            <label class="form-label">Recent / Preset Media Sources:</label>
+            <div class="preset-chips-row">
+              <button type="button" class="preset-chip" data-path="sftp://elijah@flanopticon.lan/mnt/nas/media/downloads/complete/TV Shows/www.UIndex.org    -    Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune/Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune.mkv" data-script="s06e01" data-char="CLEMENS">
+                ⚡ Remote S06E01 Times Arrow Part 2 (flanopticon.lan)
+              </button>
+              <button type="button" class="preset-chip" data-path="sftp://elijah@flanopticon.lan/mnt/nas/media/downloads/complete/TV Shows/Star Trek The Next Generation S05E26 Times Arrow 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune.mkv" data-script="s05e26" data-char="CLEMENS">
+                ⚡ Remote S05E26 Times Arrow Part 1 (flanopticon.lan)
+              </button>
+              <button type="button" class="preset-chip" data-path="./output/Star_Trek_The_Next_Generation_S06E01_Times_Arrow_Part_2_1080/CLEMENS/raw" data-script="s06e01" data-char="CLEMENS">
+                📂 Local Discovered Files
+              </button>
+            </div>
+          </div>
+
+          <!-- Media Path Inputs -->
+          <div class="form-group">
+            <label class="form-label" for="pipelineInputPath">Media File Path or Remote SFTP URL</label>
+            <input type="text" id="pipelineInputPath" class="form-input" style="font-family:var(--font-mono); font-size:13px;" placeholder="sftp://user@host/path/to/video.mkv  or  /path/to/local_video.mkv" value="sftp://elijah@flanopticon.lan/mnt/nas/media/downloads/complete/TV Shows/www.UIndex.org    -    Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune/Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune.mkv">
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label" for="pipelineScriptPath">Script Identifier or Subtitle Path</label>
+              <input type="text" id="pipelineScriptPath" class="form-input" placeholder="e.g. s06e01 or local script file" value="s06e01">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="pipelineProviderSelect">Script Provider</label>
+              <select id="pipelineProviderSelect" class="form-select">
+                <option value="startrek">Star Trek Script Archive (Automatic)</option>
+                <option value="generic">Generic SRT / Subtitle Only</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="pipelineCharInput">Target Character</label>
+              <input type="text" id="pipelineCharInput" class="form-input" placeholder="e.g. CLEMENS, PICARD, DATA" value="CLEMENS">
+            </div>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; gap:14px;">
+              <button class="btn btn-secondary" id="pipelineScanBtn">
+                <span>🔍</span>
+                <span>Scan &amp; Discover Characters</span>
+              </button>
+              <button class="btn btn-primary" id="pipelineExtractBtn">
+                <span>⚡</span>
+                <span>Run Full Extraction &amp; Neural Isolation</span>
+              </button>
+            </div>
+            <span id="pipelineScanStatusText" style="font-size:12px; color:var(--text-dim); font-family:var(--font-mono);"></span>
+          </div>
+
+          <!-- Discovered Character Dialogue Table -->
+          <div id="pipelineDiscoveredContainer" style="display:none; flex-direction:column; gap:12px; margin-top:10px;">
+            <h4 style="font-size:13px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">
+              Discovered Speaking Characters in Media
+            </h4>
+            <div style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 8px;">
+              <table class="data-table" id="pipelineCharactersTable">
+                <thead>
+                  <tr>
+                    <th>Character</th>
+                    <th>Dialogue Lines</th>
+                    <th>Est. Speaking Duration</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="pipelineCharactersTbody">
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Waveform Radar Card -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">🌊 Divide-and-Conquer Audio Radar</h2>
+            <p class="card-subtitle">Macro-representation of entire media file, parallel STT search sweeps &amp; dialogue bounds</p>
+          </div>
+          <div style="display:flex; align-items:center; gap:16px;">
+            <span style="font-family:var(--font-mono); font-size:13px; color:var(--accent-cyan);" id="radarCursorTime">0:00.00</span>
+            <span style="font-size:13px; color:var(--text-muted);" id="radarDurationText">0:00</span>
+            <span class="badge badge-ready" id="radarClipsCount">0 clips</span>
+          </div>
+        </div>
+
+        <div class="radar-container">
+          <div class="canvas-wrapper">
+            <canvas id="macroWaveformCanvas"></canvas>
+          </div>
+
+          <!-- Active Search Workers Grid -->
+          <div>
+            <h4 style="font-size:13px; color:var(--text-muted); margin-bottom:10px; text-transform:uppercase; letter-spacing:0.5px;">
+              Active Search Workers &amp; Segment Hunters
+            </h4>
+            <div class="radar-workers-grid" id="radarWorkersContainer">
+              <div class="worker-card">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-weight:600;">worker-stt-1</span>
+                  <span class="worker-badge matched">Standby</span>
+                </div>
+                <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);">Whisper Word-Timestamp Radar</div>
+                <div style="font-size:12px; color:var(--text-muted);">Indexed and ready for alignment sweeps.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Clip Inspector Panel (opens when clip on radar clicked) -->
+          <div class="clip-inspector" id="clipInspectorPanel" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <h3 style="font-size:16px; color:#fff;" id="inspectorCharName">CLEMENS</h3>
+                <span style="font-size:12px; color:var(--text-dim); font-family:var(--font-mono);" id="inspectorTimecode"></span>
+              </div>
+              <span class="badge badge-ready" id="inspectorConfidenceBadge">98% Match</span>
+            </div>
+
+            <p style="font-size:14px; color:var(--text-main); font-style:italic;" id="inspectorText"></p>
+
+            <div class="audition-grid">
+              <div class="audio-player-card">
+                <span style="font-size:12px; font-weight:600; color:var(--accent-indigo);">1. Raw Center Channel (FC Discrete Stem)</span>
+                <audio id="inspectorRawAudio" controls></audio>
+              </div>
+              <div class="audio-player-card" style="border-color:var(--accent-emerald);">
+                <span style="font-size:12px; font-weight:600; color:var(--accent-emerald);">2. Demucs v4 Neural Vocal Stem (Isolated)</span>
+                <audio id="inspectorEnhAudio" controls></audio>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STAGE 2: DATASETS & ENGINES -->
+    <section id="tab-engines" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">🧬 Character Dataset &amp; Engine Hub</h2>
+            <p class="card-subtitle" id="datasetStatsHeader">Corpus health and model readiness</p>
+          </div>
+        </div>
+
+        <div class="engines-grid" id="enginesGridContainer">
+          <!-- Populated dynamically by app.js -->
+        </div>
+      </div>
+    </section>
+
+    <!-- STAGE 3: VOICE SYNTHESIS STUDIO -->
+    <section id="tab-studio" class="tab-pane">
       <div class="card">
         <div class="card-header">
           <div>
@@ -169,177 +336,6 @@
 
             <div style="background:var(--bg-surface-elevated); border:1px solid var(--border-subtle); border-radius:8px; padding:14px; font-size:13px; color:var(--text-muted); line-height:1.5;">
               <strong style="color:#fff;">💡 Direct Comparison:</strong> Play the actor's original discrete stem above, then hit Generate to hear the synthesized voice clone side-by-side. The neural models clone the timbre, resonance, and cadence directly.
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 2: AUDIO RADAR & WAVEFORM -->
-    <section id="tab-radar" class="tab-pane">
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <h2 class="card-title">🌊 Divide-and-Conquer Audio Radar</h2>
-            <p class="card-subtitle">Macro-representation of entire media file, parallel STT search sweeps &amp; dialogue bounds</p>
-          </div>
-          <div style="display:flex; align-items:center; gap:16px;">
-            <span style="font-family:var(--font-mono); font-size:13px; color:var(--accent-cyan);" id="radarCursorTime">0:00.00</span>
-            <span style="font-size:13px; color:var(--text-muted);" id="radarDurationText">0:00</span>
-            <span class="badge badge-ready" id="radarClipsCount">0 clips</span>
-          </div>
-        </div>
-
-        <div class="radar-container">
-          <div class="canvas-wrapper">
-            <canvas id="macroWaveformCanvas"></canvas>
-          </div>
-
-          <!-- Active Search Workers Grid -->
-          <div>
-            <h4 style="font-size:13px; color:var(--text-muted); margin-bottom:10px; text-transform:uppercase; letter-spacing:0.5px;">
-              Active Search Workers &amp; Segment Hunters
-            </h4>
-            <div class="radar-workers-grid" id="radarWorkersContainer">
-              <div class="worker-card">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                  <span style="font-weight:600;">worker-stt-1</span>
-                  <span class="worker-badge matched">Standby</span>
-                </div>
-                <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);">Whisper Word-Timestamp Radar</div>
-                <div style="font-size:12px; color:var(--text-muted);">Indexed and ready for alignment sweeps.</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Clip Inspector Panel (opens when clip on radar clicked) -->
-          <div class="clip-inspector" id="clipInspectorPanel" style="display:none;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <div>
-                <h3 style="font-size:16px; color:#fff;" id="inspectorCharName">CLEMENS</h3>
-                <span style="font-size:12px; color:var(--text-dim); font-family:var(--font-mono);" id="inspectorTimecode"></span>
-              </div>
-              <span class="badge badge-ready" id="inspectorConfidenceBadge">98% Match</span>
-            </div>
-
-            <p style="font-size:14px; color:var(--text-main); font-style:italic;" id="inspectorText"></p>
-
-            <div class="audition-grid">
-              <div class="audio-player-card">
-                <span style="font-size:12px; font-weight:600; color:var(--accent-indigo);">1. Raw Center Channel (FC Discrete Stem)</span>
-                <audio id="inspectorRawAudio" controls></audio>
-              </div>
-              <div class="audio-player-card" style="border-color:var(--accent-emerald);">
-                <span style="font-size:12px; font-weight:600; color:var(--accent-emerald);">2. Demucs v4 Neural Vocal Stem (Isolated)</span>
-                <audio id="inspectorEnhAudio" controls></audio>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 3: DATASETS & ENGINES -->
-    <section id="tab-engines" class="tab-pane">
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <h2 class="card-title">🧬 Character Dataset &amp; Engine Hub</h2>
-            <p class="card-subtitle" id="datasetStatsHeader">Corpus health and model readiness</p>
-          </div>
-        </div>
-
-        <div class="engines-grid" id="enginesGridContainer">
-          <!-- Populated dynamically by app.js -->
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 4: PIPELINE & INGESTION -->
-    <section id="tab-pipeline" class="tab-pane">
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <h2 class="card-title">🛰️ Media Ingestion &amp; Dialogue Mining</h2>
-            <p class="card-subtitle">Seek discrete center-channel audio directly over remote SFTP/SSH or local files</p>
-          </div>
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:18px;">
-          <!-- Quick Preset Chips -->
-          <div>
-            <label class="form-label">Recent / Preset Media Sources:</label>
-            <div class="preset-chips-row">
-              <button type="button" class="preset-chip" data-path="sftp://elijah@flanopticon.lan/mnt/nas/media/downloads/complete/TV Shows/www.UIndex.org    -    Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune/Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune.mkv" data-script="s06e01" data-char="CLEMENS">
-                ⚡ Remote S06E01 Times Arrow Part 2 (flanopticon.lan)
-              </button>
-              <button type="button" class="preset-chip" data-path="sftp://elijah@flanopticon.lan/mnt/nas/media/downloads/complete/TV Shows/Star Trek The Next Generation S05E26 Times Arrow 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune.mkv" data-script="s05e26" data-char="CLEMENS">
-                ⚡ Remote S05E26 Times Arrow Part 1 (flanopticon.lan)
-              </button>
-              <button type="button" class="preset-chip" data-path="./output/Star_Trek_The_Next_Generation_S06E01_Times_Arrow_Part_2_1080/CLEMENS/raw" data-script="s06e01" data-char="CLEMENS">
-                📂 Local Discovered Files
-              </button>
-            </div>
-          </div>
-
-          <!-- Media Path Inputs -->
-          <div class="form-group">
-            <label class="form-label" for="pipelineInputPath">Media File Path or Remote SFTP URL</label>
-            <input type="text" id="pipelineInputPath" class="form-input" style="font-family:var(--font-mono); font-size:13px;" placeholder="sftp://user@host/path/to/video.mkv  or  /path/to/local_video.mkv" value="sftp://elijah@flanopticon.lan/mnt/nas/media/downloads/complete/TV Shows/www.UIndex.org    -    Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune/Star Trek The Next Generation S06E01 Times Arrow Part 2 1080p AMZN WEB-DL DDP5 1 H 264-Kitsune.mkv">
-          </div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label" for="pipelineScriptPath">Script Identifier or Subtitle Path</label>
-              <input type="text" id="pipelineScriptPath" class="form-input" placeholder="e.g. s06e01 or local script file" value="s06e01">
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="pipelineProviderSelect">Script Provider</label>
-              <select id="pipelineProviderSelect" class="form-select">
-                <option value="startrek">Star Trek Script Archive (Automatic)</option>
-                <option value="generic">Generic SRT / Subtitle Only</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="pipelineCharInput">Target Character</label>
-              <input type="text" id="pipelineCharInput" class="form-input" placeholder="e.g. CLEMENS, PICARD, DATA" value="CLEMENS">
-            </div>
-          </div>
-
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
-            <div style="display:flex; gap:14px;">
-              <button class="btn btn-secondary" id="pipelineScanBtn">
-                <span>🔍</span>
-                <span>Scan &amp; Discover Characters</span>
-              </button>
-              <button class="btn btn-primary" id="pipelineExtractBtn">
-                <span>⚡</span>
-                <span>Run Full Extraction &amp; Neural Isolation</span>
-              </button>
-            </div>
-            <span id="pipelineScanStatusText" style="font-size:12px; color:var(--text-dim); font-family:var(--font-mono);"></span>
-          </div>
-
-          <!-- Discovered Character Dialogue Table -->
-          <div id="pipelineDiscoveredContainer" style="display:none; flex-direction:column; gap:12px; margin-top:14px;">
-            <h4 style="font-size:13px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">
-              Discovered Speaking Characters in Media
-            </h4>
-            <div style="max-height: 280px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 8px;">
-              <table class="data-table" id="pipelineCharactersTable">
-                <thead>
-                  <tr>
-                    <th>Character</th>
-                    <th>Dialogue Lines</th>
-                    <th>Est. Speaking Duration</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody id="pipelineCharactersTbody">
-                </tbody>
-              </table>
             </div>
           </div>
         </div>

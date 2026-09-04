@@ -26,6 +26,10 @@ class VoicesolateApp {
     // Load initial system and episode data
     await this.loadSystemStatus();
     await this.loadEpisodes();
+
+    if (this.radar) {
+      setTimeout(() => this.radar.resize(), 60);
+    }
   }
 
   setupTabs() {
