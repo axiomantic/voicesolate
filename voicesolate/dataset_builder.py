@@ -17,11 +17,12 @@ class DatasetBuilder:
     """
 
     def __init__(self, target_char_dir: Path):
-        self.char_dir = target_char_dir
-        self.enhanced_dir = target_char_dir / "enhanced"
-        self.raw_dir = target_char_dir / "raw"
-        self.datasets_dir = target_char_dir / "datasets"
-        self.models_dir = target_char_dir / "models"
+        self.char_dir = Path(target_char_dir)
+        self.char_name = self.char_dir.name
+        self.enhanced_dir = self.char_dir / "enhanced"
+        self.raw_dir = self.char_dir / "raw"
+        self.datasets_dir = self.char_dir / "datasets"
+        self.models_dir = self.char_dir / "models"
 
     def _resample_audio(self, input_path: Path, output_path: Path, target_sr: int):
         """Reads WAV and writes to target sample rate, mono 16-bit PCM."""
@@ -44,6 +45,85 @@ class DatasetBuilder:
 
         sf.write(str(output_path), data, target_sr, subtype="PCM_16")
 
+    def _resolve_clip_file(self, clip: Dict[str, Any]) -> Optional[Path]:
+        """Resolves the audio file path across current and other episode directories."""
+        candidate = Path(clip.get("enhanced_file") or clip.get("file") or "")
+        if candidate.exists():
+            return candidate
+
+        # Check in self.enhanced_dir
+        if (self.enhanced_dir / candidate.name).exists():
+            return self.enhanced_dir / candidate.name
+
+        # Check in self.raw_dir
+        if (self.raw_dir / candidate.name).exists():
+            return self.raw_dir / candidate.name
+
+        # Search across other episode outputs under output/
+        output_root = self.char_dir.parent.parent
+        if output_root.exists():
+            for ep_dir in output_root.iterdir():
+                if ep_dir.is_dir():
+                    other_enh = ep_dir / self.char_name / "enhanced" / candidate.name
+                    if other_enh.exists():
+                        return other_enh
+                    other_raw = ep_dir / self.char_name / "raw" / candidate.name
+                    if other_raw.exists():
+                        return other_raw
+
+        return None
+
+    @classmethod
+    def aggregate_all_clips_for_character(cls, char_name: str, output_root: Path, current_clips: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+        """
+        Gathers all valid clips for this character across every episode directory in output_root.
+        Prevents duplicates by checking audio content filenames.
+        """
+        all_clips = []
+        seen_stems = set()
+
+        # 1. Include current clips first
+        if current_clips:
+            for c in current_clips:
+                if c.get("character") == char_name:
+                    p = Path(c.get("enhanced_file") or c.get("file") or "")
+                    stem = p.stem.replace("_enhanced", "")
+                    if stem not in seen_stems:
+                        seen_stems.add(stem)
+                        all_clips.append(dict(c))
+
+        # 2. Discover clips from other episode manifests
+        if output_root.exists():
+            for manifest_file in sorted(output_root.glob("*/manifest.json")):
+                try:
+                    with open(manifest_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    for c in data.get("clips", []):
+                        if c.get("character") == char_name:
+                            p = Path(c.get("enhanced_file") or c.get("file") or "")
+                            stem = p.stem.replace("_enhanced", "")
+                            if stem not in seen_stems:
+                                # Verify file actually exists
+                                enh_path = manifest_file.parent / char_name / "enhanced" / p.name
+                                raw_path = manifest_file.parent / char_name / "raw" / p.name
+                                resolved = None
+                                if p.exists():
+                                    resolved = p
+                                elif enh_path.exists():
+                                    resolved = enh_path
+                                elif raw_path.exists():
+                                    resolved = raw_path
+
+                                if resolved and resolved.exists():
+                                    c_copy = dict(c)
+                                    c_copy["enhanced_file"] = str(resolved)
+                                    seen_stems.add(stem)
+                                    all_clips.append(c_copy)
+                except Exception:
+                    continue
+
+        return all_clips
+
     def build_piper_ljspeech(self, clips: List[Dict[str, Any]]) -> Path:
         """
         Builds LJSpeech-compatible dataset for Piper VITS training.
@@ -55,16 +135,15 @@ class DatasetBuilder:
         """
         piper_dir = self.datasets_dir / "piper"
         wavs_dir = piper_dir / "wavs"
+        if wavs_dir.exists():
+            shutil.rmtree(wavs_dir)
         wavs_dir.mkdir(parents=True, exist_ok=True)
 
         metadata_rows = []
         for i, clip in enumerate(clips):
-            source_file = Path(clip.get("enhanced_file") or clip["file"])
-            if not source_file.exists():
-                # Fallback to enhanced_dir if path changed
-                source_file = self.enhanced_dir / source_file.name
-                if not source_file.exists():
-                    continue
+            source_file = self._resolve_clip_file(clip)
+            if not source_file:
+                continue
 
             clip_id = f"clip_{i:04d}_{source_file.stem.replace('_enhanced', '')}"
             target_wav = wavs_dir / f"{clip_id}.wav"
@@ -100,17 +179,17 @@ class DatasetBuilder:
         """
         xtts_dir = self.datasets_dir / "xtts"
         wavs_dir = xtts_dir / "wavs"
+        if wavs_dir.exists():
+            shutil.rmtree(wavs_dir)
         wavs_dir.mkdir(parents=True, exist_ok=True)
 
         metadata_rows = [["audio_file", "text", "speaker_name"]]
-        character_name = clips[0]["character"] if clips else "SPEAKER"
+        character_name = self.char_name
 
         for i, clip in enumerate(clips):
-            source_file = Path(clip.get("enhanced_file") or clip["file"])
-            if not source_file.exists():
-                source_file = self.enhanced_dir / source_file.name
-                if not source_file.exists():
-                    continue
+            source_file = self._resolve_clip_file(clip)
+            if not source_file:
+                continue
 
             clip_id = f"xtts_{i:04d}_{source_file.stem.replace('_enhanced', '')}"
             target_wav = wavs_dir / f"{clip_id}.wav"
@@ -149,15 +228,15 @@ class DatasetBuilder:
         """
         f5_dir = self.datasets_dir / "f5tts"
         wavs_dir = f5_dir / "wavs"
+        if wavs_dir.exists():
+            shutil.rmtree(wavs_dir)
         wavs_dir.mkdir(parents=True, exist_ok=True)
 
         metadata_rows = []
         for i, clip in enumerate(clips):
-            source_file = Path(clip.get("enhanced_file") or clip["file"])
-            if not source_file.exists():
-                source_file = self.enhanced_dir / source_file.name
-                if not source_file.exists():
-                    continue
+            source_file = self._resolve_clip_file(clip)
+            if not source_file:
+                continue
 
             clip_id = f"f5_{i:04d}_{source_file.stem.replace('_enhanced', '')}"
             target_wav = wavs_dir / f"{clip_id}.wav"
@@ -177,10 +256,8 @@ class DatasetBuilder:
         best_diff = float("inf")
         best_clip_text = ""
         for i, clip in enumerate(clips):
-            source_file = Path(clip.get("enhanced_file") or clip["file"])
-            if not source_file.exists():
-                source_file = self.enhanced_dir / source_file.name
-            if source_file.exists():
+            source_file = self._resolve_clip_file(clip)
+            if source_file and source_file.exists():
                 dur = sf.info(str(source_file)).duration
                 if 7.0 <= dur <= 14.0 and abs(dur - 9.5) < best_diff:
                     best_diff = abs(dur - 9.5)
@@ -194,19 +271,27 @@ class DatasetBuilder:
 
         return f5_dir
 
-    def build_all(self, clips: List[Dict[str, Any]], targets: Optional[List[str]] = None) -> Dict[str, Path]:
-        """Builds all requested target datasets."""
+    def build_all(self, clips: List[Dict[str, Any]], targets: Optional[List[str]] = None, aggregate_all: bool = True) -> Dict[str, Path]:
+        """
+        Builds all requested target datasets.
+        If aggregate_all is True, merges clips across all episodes for this character.
+        """
+        final_clips = clips
+        if aggregate_all:
+            output_root = self.char_dir.parent.parent
+            final_clips = self.aggregate_all_clips_for_character(self.char_name, output_root, current_clips=clips)
+
         selected_targets = [t.lower().strip() for t in (targets or ["all"])]
         do_all = "all" in selected_targets
 
         results = {}
         if do_all or "piper" in selected_targets or "onnx" in selected_targets:
-            results["piper"] = self.build_piper_ljspeech(clips)
+            results["piper"] = self.build_piper_ljspeech(final_clips)
 
         if do_all or "xtts" in selected_targets or "coqui" in selected_targets or "chatterbox" in selected_targets:
-            results["xtts"] = self.build_xtts_dataset(clips)
+            results["xtts"] = self.build_xtts_dataset(final_clips)
 
         if do_all or "f5" in selected_targets or "f5-tts" in selected_targets or "f5tts" in selected_targets:
-            results["f5tts"] = self.build_f5tts_dataset(clips)
+            results["f5tts"] = self.build_f5tts_dataset(final_clips)
 
         return results

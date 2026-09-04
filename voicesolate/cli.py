@@ -40,6 +40,7 @@ def parse_args():
     parser.add_argument("--no-interactive", action="store_true", help="Skip interactive audition / studio at the end")
     parser.add_argument("--no-enhance", action="store_true", help="Skip ML vocal isolation and super-resolution enhancement")
     parser.add_argument("--all-characters", action="store_true", help="Select all characters found in script")
+    parser.add_argument("--no-aggregate", action="store_true", help="Do not aggregate clips from other episodes in output directory for training datasets (default: aggregates all available clips for character)")
 
     # Granular Cache Bypass Controls (Additive & Re-entrant)
     parser.add_argument("--no-cache-stt", action="store_true", help="Bypass STT whisper cache for this run (still writes updated cache)")
@@ -307,8 +308,14 @@ def main():
             char_dir = output_base_dir / char_name
             builder = DatasetBuilder(char_dir)
 
-            console.print(f"\n[bold cyan]── Building datasets for character: {char_name} ({len(char_clips)} clips) ──[/bold cyan]")
-            datasets = builder.build_all(char_clips, targets=args.targets)
+            if not args.no_aggregate:
+                all_char_clips = builder.aggregate_all_clips_for_character(char_name, output_base_dir.parent, current_clips=char_clips)
+                ep_count = len(set(Path(c.get("enhanced_file", "")).parent.parent.parent.name for c in all_char_clips if c.get("enhanced_file")))
+                console.print(f"\n[bold cyan]── Building datasets for character: {char_name} ({len(all_char_clips)} clips aggregated across {ep_count or 1} episodes) ──[/bold cyan]")
+                datasets = builder.build_all(all_char_clips, targets=args.targets, aggregate_all=False)
+            else:
+                console.print(f"\n[bold cyan]── Building datasets for character: {char_name} ({len(char_clips)} clips) ──[/bold cyan]")
+                datasets = builder.build_all(char_clips, targets=args.targets, aggregate_all=False)
 
             for target_name, path in datasets.items():
                 console.print(f"[green]✓ {target_name.upper()} dataset ready:[/green] {path}")
