@@ -192,16 +192,19 @@ export class WaveformRadar {
       }
 
       // Sleek Glassmorphic Center Loading Pill
-      const pillW = 340;
-      const pillH = 42;
+      const msg = this.loadingMessage || "Sampling media audio timeline...";
+      ctx.font = "600 13px ui-sans-serif, system-ui, sans-serif";
+      const textWidth = ctx.measureText(msg).width;
+      const pillW = Math.min(w - 32, Math.max(380, Math.ceil(textWidth) + 64));
+      const pillH = 44;
       const pillX = (w - pillW) / 2;
       const pillY = midY - pillH / 2;
 
-      ctx.fillStyle = "rgba(15, 23, 42, 0.90)";
-      ctx.strokeStyle = "rgba(6, 182, 212, 0.65)";
+      ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+      ctx.strokeStyle = "rgba(6, 182, 212, 0.70)";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.roundRect(pillX, pillY, pillW, pillH, 8);
+      ctx.roundRect(pillX, pillY, pillW, pillH, 10);
       ctx.fill();
       ctx.stroke();
 
@@ -214,8 +217,8 @@ export class WaveformRadar {
 
       // Loading text
       ctx.fillStyle = "#f8fafc";
-      ctx.font = "600 12px ui-sans-serif, system-ui, sans-serif";
-      ctx.fillText(this.loadingMessage || "Sampling media audio timeline...", pillX + 38, midY + 4);
+      ctx.font = "600 13px ui-sans-serif, system-ui, sans-serif";
+      ctx.fillText(msg, pillX + 38, midY + 4);
 
       return;
     }

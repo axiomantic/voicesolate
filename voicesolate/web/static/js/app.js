@@ -539,7 +539,7 @@ class VoicesolateWizardApp {
         extStatusEl.innerText = "⏳ Sampling media file for audio envelope & duration...";
       }
       if (this.radar) {
-        this.radar.setLoading(true, "📡 Sampling media timeline & probing audio channels...");
+        this.radar.setLoading(true, "Sampling media timeline & probing audio channels...");
       }
 
       try {
