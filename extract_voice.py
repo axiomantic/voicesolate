@@ -106,15 +106,16 @@ def main():
 
     # Generic Script Auto-detection
     if not script_source:
-        # Check if user specified a provider or if Star Trek pattern is obvious
-        if provider == "startrek" or "star trek" in episode_name.lower():
-            m = re.search(r"s(\d{2})e(\d{2})", episode_name.lower())
+        # Check if user specified a provider or if Star Trek pattern is present in filename or episode name
+        raw_name = f"{filename} {episode_name}".lower()
+        if provider == "startrek" or "star trek" in raw_name or "star_trek" in raw_name:
+            m = re.search(r"s(\d{2})e(\d{2})", raw_name)
             if m:
                 script_source = f"s{m.group(1)}e{m.group(2)}"
                 provider = "startrek"
                 console.print(f"[cyan]Detected Star Trek episode script:[/cyan] {script_source}")
-            elif "times arrow" in episode_name.lower():
-                script_source = "s06e01" if "part 2" in episode_name.lower() else "s05e26"
+            elif "times arrow" in raw_name or "times_arrow" in raw_name:
+                script_source = "s06e01" if ("part 2" in raw_name or "part_2" in raw_name) else "s05e26"
                 provider = "startrek"
                 console.print(f"[cyan]Detected Star Trek episode script:[/cyan] {script_source}")
 
