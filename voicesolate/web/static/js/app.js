@@ -1003,15 +1003,38 @@ class VoicesolateWizardApp {
 
       let statusBadgeClass = "badge-locked";
       let statusText = "Needs Configuration";
+      let warningHtml = "";
+
       if (isTraining) {
         statusBadgeClass = "badge-scanning";
         statusText = "⏳ Training in Progress...";
       } else if (!eng.installed) {
         statusBadgeClass = "badge-locked";
         statusText = "Package Missing";
-      } else if (eng.trained || eng.ready) {
+      } else if (eng.id === "piper" && !eng.trainer_installed) {
+        statusBadgeClass = "badge-locked";
+        statusText = "⚠️ piper-train Missing";
+        warningHtml = `
+          <div style="background:rgba(245, 158, 11, 0.12); border:1px solid rgba(245, 158, 11, 0.35); border-radius:6px; padding:8px 10px; font-size:11px; color:#fbbf24; margin:8px 0; line-height:1.4;">
+            <strong>⚠️ Missing Training Dependency:</strong>
+            <code>piper-train</code> CLI is not installed. Piper VITS cannot fine-tune this character's voice without it. Click <strong>Install piper-train</strong> below.
+          </div>
+        `;
+      } else if (eng.is_baseline) {
+        statusBadgeClass = "badge-locked";
+        statusText = "⚠️ Baseline Only (Bryce)";
+        warningHtml = `
+          <div style="background:rgba(239, 68, 68, 0.12); border:1px solid rgba(239, 68, 68, 0.35); border-radius:6px; padding:8px 10px; font-size:11px; color:#f87171; margin:8px 0; line-height:1.4;">
+            <strong>⚠️ Generic Voice Loaded:</strong>
+            The loaded ONNX model is the stock Bryce reader and does NOT sound like ${this.selectedCharacter || 'the character'}. Fine-tune with piper-train to clone this voice.
+          </div>
+        `;
+      } else if (eng.trained) {
         statusBadgeClass = "badge-ready";
         statusText = "✓ Trained & Ready";
+      } else if (eng.ready) {
+        statusBadgeClass = "badge-ready";
+        statusText = "✓ Zero-Shot Ready";
       } else if (eng.dataset_ready) {
         statusBadgeClass = "badge-ready";
         statusText = "Dataset Ready";
@@ -1029,6 +1052,15 @@ class VoicesolateWizardApp {
         actionBtnHtml = `
           <button class="btn btn-secondary btn-sm install-engine-btn" data-engine="${eng.id}">
             📥 Install ${eng.name}
+          </button>
+        `;
+      } else if (eng.id === "piper" && !eng.trainer_installed) {
+        actionBtnHtml = `
+          <button class="btn btn-warning btn-sm install-engine-btn" data-engine="piper-train" style="background:#d97706; border-color:#b45309; color:#fff; font-weight:600;">
+            📥 Install piper-train
+          </button>
+          <button class="btn btn-secondary btn-sm train-engine-btn" data-engine="${eng.id}">
+            🚀 Train ${eng.name}
           </button>
         `;
       } else {
@@ -1056,6 +1088,8 @@ class VoicesolateWizardApp {
             ${eng.model_path || 'Awaiting training / compilation'}
           </div>
         </div>
+
+        ${warningHtml}
 
         <div class="train-progress-box" id="train_prog_${eng.id}" style="${isTraining ? 'display:block;' : 'display:none;'} margin-bottom:8px;">
           <div class="progress-track"><div class="progress-fill" id="train_fill_${eng.id}" style="width:${(this.trainingProgress && this.trainingProgress[eng.id]) || 25}%;"></div></div>
@@ -1099,16 +1133,46 @@ class VoicesolateWizardApp {
 
   async handleInstallEngine(engineId, btn) {
     btn.disabled = true;
+    const origText = btn.innerText;
     btn.innerText = `⏳ Installing ${engineId}...`;
     try {
-      await api.installEngine(engineId);
+      const res = await api.installEngine(engineId);
+      if (res && res.job_id) {
+        const poll = setInterval(async () => {
+          try {
+            const j = await api.getJobStatus(res.job_id);
+            if (!j) return;
+            if (j.status === "completed") {
+              clearInterval(poll);
+              btn.innerText = `✓ Installed!`;
+              setTimeout(() => this.onEnterStep3(), 1000);
+            } else if (j.status === "failed") {
+              clearInterval(poll);
+              alert(`Installation failed for ${engineId}: ${j.error || j.message}`);
+              btn.disabled = false;
+              btn.innerText = origText;
+            } else {
+              btn.innerText = `⏳ ${j.message || 'Installing...'}`;
+            }
+          } catch (e) {
+            console.warn(e);
+          }
+        }, 1200);
+      }
     } catch (err) {
       alert("Installation request failed: " + err.message);
       btn.disabled = false;
+      btn.innerText = origText;
     }
   }
 
   async handleTrainEngine(engineId, btn) {
+    const eng = (this.engines || []).find(e => e.id === engineId);
+    if (engineId === "piper" && eng && !eng.trainer_installed) {
+      alert("Cannot train Piper: 'piper-train' CLI is not installed. Please click 'Install piper-train' first to install the training package.");
+      return;
+    }
+
     if (!this.activeTrainingEngines) this.activeTrainingEngines = new Set();
     if (!this.trainingProgress) this.trainingProgress = {};
     if (!this.trainingMessage) this.trainingMessage = {};

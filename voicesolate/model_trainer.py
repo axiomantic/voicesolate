@@ -48,13 +48,13 @@ class ModelTrainer:
             json.dump(config_data, f, indent=2)
 
         if not has_piper_train:
-            console.print("[yellow]Notice: 'piper_train' CLI not found in PATH. Created Piper training configuration & LJSpeech dataset.[/yellow]")
-            console.print(f"[green]✓ Piper dataset ready for training: {piper_dataset_dir}[/green]")
-            # Ensure an ONNX baseline model exists so Piper can be used for CPU synthesis in Step 4
-            existing_onnx = list(out_model_dir.glob("*.onnx"))
-            if not existing_onnx:
-                self._download_base_piper_voice(out_model_dir, base_voice)
-            return out_model_dir
+            console.print("[red]❌ 'piper_train' CLI not found in PATH.[/red]")
+            console.print(f"[green]✓ Piper dataset is ready at: {piper_dataset_dir}[/green]")
+            raise RuntimeError(
+                "Cannot train Piper: 'piper_train' CLI not found in PATH. "
+                "Piper VITS requires the 'piper-train' package to fine-tune weights on this character's dataset. "
+                "Click 'Install piper-train' or install it via pip."
+            )
 
         try:
             console.print("[cyan]🚀 [Piper] Launching fine-tuning process...[/cyan]")

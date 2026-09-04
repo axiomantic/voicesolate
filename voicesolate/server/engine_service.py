@@ -151,6 +151,29 @@ class EngineService:
             if (cdir / "datasets" / "piper").exists():
                 piper_dataset_path = str((cdir / "datasets" / "piper").resolve())
 
+        # Check piper_train availability
+        has_piper_train = (shutil.which("piper_train") is not None) or (shutil.which("piper-train") is not None)
+        try:
+            import piper_train
+            has_piper_train = True
+        except ImportError:
+            pass
+
+        piper_is_baseline = False
+        if piper_onnx_path:
+            p_name = Path(piper_onnx_path).name.lower()
+            if "bryce" in p_name or "en_us" in p_name or "baseline" in p_name:
+                piper_is_baseline = True
+            voice_json = Path(piper_onnx_path).parent / "voice.json"
+            if voice_json.exists():
+                try:
+                    with open(voice_json, "r") as vj:
+                        vj_data = json.load(vj)
+                        if vj_data.get("status") in ["ready_to_train", "baseline"]:
+                            piper_is_baseline = True
+                except Exception:
+                    pass
+
         engines = [
             {
                 "id": "f5-tts",
@@ -183,14 +206,16 @@ class EngineService:
                 "name": "Piper VITS",
                 "architecture": "Fast CPU Neural VITS Inference (22.05kHz)",
                 "installed": piper_pkg,
+                "trainer_installed": has_piper_train,
                 "ready": piper_ready,
-                "trained": piper_ready and piper_onnx_path is not None,
+                "trained": piper_ready and piper_onnx_path is not None and not piper_is_baseline,
+                "is_baseline": piper_is_baseline,
                 "dataset_ready": piper_dataset_ready,
-                "model_path": piper_onnx_path,
+                "model_path": piper_onnx_path if not piper_is_baseline else None,
                 "dataset_path": piper_dataset_path,
                 "type": "compiled_onnx",
-                "description": "Ultra-fast, lightweight embedded neural voice running locally on CPU in real-time.",
-                "install_hint": "pip install piper-tts" if not piper_pkg else None
+                "description": "Ultra-fast, lightweight embedded neural voice running locally on CPU in real-time. (Requires piper-train to fine-tune on character data).",
+                "install_hint": "pip install piper-tts" if not piper_pkg else ("pip install piper-train" if not has_piper_train else None)
             }
         ]
         return engines

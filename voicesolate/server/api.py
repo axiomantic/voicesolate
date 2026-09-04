@@ -159,19 +159,22 @@ def install_engine(req: InstallEngineRequest, background_tasks: BackgroundTasks)
             pkg_map = {
                 "piper": "piper-tts",
                 "piper-tts": "piper-tts",
+                "piper-train": "git+https://github.com/rhasspy/piper.git#subdirectory=src/python",
+                "piper_train": "git+https://github.com/rhasspy/piper.git#subdirectory=src/python",
                 "xtts": "TTS",
                 "xtts-v2": "TTS",
                 "f5-tts": "f5-tts",
                 "f5tts": "f5-tts"
             }
             pkg = pkg_map.get(engine_id.lower(), engine_id)
-            proc = subprocess.run([sys.executable, "-m", "pip", "install", pkg], capture_output=True, text=True, timeout=180)
+            job_manager.update_job(job_id, progress=40.0, stage="installing", message=f"Running pip install for {engine_id}...")
+            proc = subprocess.run([sys.executable, "-m", "pip", "install", pkg], capture_output=True, text=True, timeout=300)
             if proc.returncode != 0:
                 logger.error(f"pip install failed: {proc.stderr}")
-                raise RuntimeError(proc.stderr[:200] or "pip install failed")
+                raise RuntimeError(proc.stderr[-300:] or "pip install failed")
             import importlib
             importlib.invalidate_caches()
-            job_manager.update_job(job_id, progress=100.0, stage="complete", status="completed", message=f"{engine_id} ({pkg}) installed successfully.")
+            job_manager.update_job(job_id, progress=100.0, stage="complete", status="completed", message=f"{engine_id} installed successfully.")
         except Exception as e:
             job_manager.update_job(job_id, status="failed", error=str(e), message=f"Installation failed: {e}")
 
@@ -557,13 +560,29 @@ def train_model(req: TrainModelRequest, background_tasks: BackgroundTasks):
                         clips = [c for c in mdata.get("clips", []) if c.get("character", "").upper() == cdir.name.upper()]
                         if clips:
                             DatasetBuilder(cdir).build_piper_ljspeech(clips)
-                job_manager.update_job(job_id, progress=40.0, stage="train", message="Configuring Piper VITS & LJSpeech dataset...")
+
+                has_piper_train = (shutil.which("piper_train") is not None) or (shutil.which("piper-train") is not None)
+                if not has_piper_train:
+                    try:
+                        import piper_train
+                        has_piper_train = True
+                    except ImportError:
+                        pass
+
+                if not has_piper_train:
+                    job_manager.update_job(
+                        job_id,
+                        progress=35.0,
+                        stage="error",
+                        status="failed",
+                        error="Missing dependency: 'piper-train' is not installed. Piper VITS requires the piper-train package to fine-tune weights on this character's dataset.",
+                        message="Training failed: 'piper-train' CLI is not installed. Click 'Install piper-train' in Step 3."
+                    )
+                    return
+
+                job_manager.update_job(job_id, progress=40.0, stage="train", message="Configuring Piper VITS & launching training...")
                 res = trainer.train_piper(datasets["piper"])
-                has_piper_train = shutil.which("piper_train") is not None
-                if has_piper_train:
-                    complete_msg = f"✓ Piper VITS voice model compiled successfully for {cdir.name}!"
-                else:
-                    complete_msg = f"✓ LJSpeech dataset packaged for {cdir.name} & baseline ONNX model ready for Step 4!"
+                complete_msg = f"✓ Piper VITS voice model compiled successfully for {cdir.name}!"
             elif "xtts" in eng_norm:
                 if not (cdir / "datasets" / "xtts" / "reference_audio").exists():
                     job_manager.update_job(job_id, progress=20.0, stage="dataset", message="Building reference clips for XTTS...")
