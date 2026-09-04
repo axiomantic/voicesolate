@@ -30,6 +30,7 @@ def parse_args():
     parser.add_argument("-c", "--character", nargs="+", default=None, help="Specific character(s) to export (bypasses interactive TUI)")
     parser.add_argument("--wyoming-host", default="10.0.2.141", help="Wyoming STT server IP/hostname (default: 10.0.2.141)")
     parser.add_argument("--wyoming-port", type=int, default=10300, help="Wyoming STT server port (default: 10300)")
+    parser.add_argument("--min-duration", type=float, default=0.0, help="Minimum clip duration in seconds (e.g. 5.0 to discard short utterances <= 5s)")
     parser.add_argument("--no-enhance", action="store_true", help="Skip ML vocal isolation and super-resolution enhancement")
     parser.add_argument("--all-characters", action="store_true", help="Select all characters found in script")
     return parser.parse_args()
@@ -168,29 +169,46 @@ def main():
             progress=progress
         )
 
+        # Filter clips by minimum duration if specified
+        if args.min_duration > 0.0:
+            initial_count = len(aligned_clips)
+            aligned_clips = [c for c in aligned_clips if (c.end_sec - c.start_sec) >= args.min_duration]
+            discarded = initial_count - len(aligned_clips)
+            if discarded > 0:
+                console.print(f"[yellow]Filtered out {discarded} clip(s) shorter than {args.min_duration:.1f}s.[/yellow]")
+
         export_task = progress.add_task("[magenta]Exporting & Enhancing Clips...", total=len(aligned_clips))
 
         for clip in aligned_clips:
             char_dir = output_base_dir / clip.character
-            char_dir.mkdir(parents=True, exist_ok=True)
-            clip_path = char_dir / f"{clip.timecode_str}.wav"
+            raw_dir = char_dir / "raw"
+            enhanced_dir = char_dir / "enhanced"
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            if not args.no_enhance:
+                enhanced_dir.mkdir(parents=True, exist_ok=True)
+
+            clip_path = raw_dir / f"{clip.timecode_str}.wav"
+            enhanced_path = enhanced_dir / f"{clip.timecode_str}_enhanced.wav"
 
             # 1. Slice audio
             extractor.export_clip(clip.start_sec, clip.end_sec, str(clip_path))
 
             # 2. ML Cleanup & Super-Resolution Enhancement
             if not args.no_enhance:
-                enhanced_path = char_dir / f"{clip.timecode_str}_enhanced.wav"
                 enhancer.clean_and_enhance_file(str(clip_path), str(enhanced_path))
 
-            manifest["clips"].append({
+            clip_entry = {
                 "character": clip.character,
                 "text": clip.text,
                 "start_sec": clip.start_sec,
                 "end_sec": clip.end_sec,
                 "confidence": clip.confidence,
                 "file": str(clip_path)
-            })
+            }
+            if not args.no_enhance:
+                clip_entry["enhanced_file"] = str(enhanced_path)
+
+            manifest["clips"].append(clip_entry)
 
             progress.advance(export_task, 1)
 

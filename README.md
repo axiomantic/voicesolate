@@ -68,6 +68,7 @@ voicesolate -i "path/to/movie.mkv"
 | `-s, --script` | Script path (`.txt`, `.json`, `.srt`), or web URL | Auto-detected from video subtitles |
 | `--provider` | Optional script provider (e.g. `startrek`) | `None` |
 | `-o, --output-dir` | Directory where audio clips and manifest are saved | `./output` |
+| `--min-duration` | Discard audio clips shorter than N seconds (e.g. `5.0`) | `0.0` (keep all) |
 | `--no-enhance` | Skip neural Demucs isolation (export discrete raw slices) | `False` |
 | `--wyoming-host` | Optional Wyoming Whisper STT IP | `10.0.2.141` |
 | `--wyoming-port` | Optional Wyoming Whisper STT Port | `10300` |
@@ -81,9 +82,12 @@ Extracted audio and metadata are stored in:
 output/<media_name>/
 ├── manifest.json
 └── <CHARACTER>/
-    ├── 00_00_35_915-00_00_36_855.wav            # Raw discrete dialogue slice
-    ├── 00_00_35_915-00_00_36_855_enhanced.wav   # Clean neural vocal master
-    └── ...
+    ├── raw/
+    │   ├── 00_00_35_915-00_00_36_855.wav          # Raw discrete dialogue slice
+    │   └── ...
+    └── enhanced/
+        ├── 00_00_35_915-00_00_36_855_enhanced.wav # Clean neural vocal master
+        └── ...
 ```
 
 `manifest.json` provides dataset-ready metadata with script dialogue, exact timecodes, and transcription confidence scores.
