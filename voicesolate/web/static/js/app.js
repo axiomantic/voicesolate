@@ -503,6 +503,15 @@ class VoicesolateWizardApp {
           if (demucsSnippet) { demucsSnippet.innerText = "Queue empty"; }
           if (demucsQueue) { demucsQueue.innerText = "0 clips pending"; }
 
+          const sttList = document.getElementById("sttQueueItemsList");
+          const demucsList = document.getElementById("demucsQueueItemsList");
+          const sttSummary = document.getElementById("sttQueueSummary");
+          const demucsSummary = document.getElementById("demucsQueueSummary");
+          if (sttList) { sttList.innerHTML = ""; sttList.style.display = "none"; }
+          if (demucsList) { demucsList.innerHTML = ""; demucsList.style.display = "none"; }
+          if (sttSummary) sttSummary.innerText = "0 items";
+          if (demucsSummary) demucsSummary.innerText = "0 items";
+
           const extStatusEl = document.getElementById("step2ExtractionStatusText");
           if (extStatusEl) extStatusEl.innerText = "Audio cache cleared. Ready to search.";
 
@@ -645,6 +654,11 @@ class VoicesolateWizardApp {
     if (demucsBadge) { demucsBadge.className = "worker-badge idle"; demucsBadge.innerText = "queued"; }
     if (demucsSnippet) { demucsSnippet.innerText = "Waiting for alignment matches..."; }
     if (demucsQueue) { demucsQueue.innerText = "Queue waiting"; }
+
+    const sttList = document.getElementById("sttQueueItemsList");
+    const demucsList = document.getElementById("demucsQueueItemsList");
+    if (sttList) { sttList.innerHTML = ""; sttList.style.display = "none"; }
+    if (demucsList) { demucsList.innerHTML = ""; demucsList.style.display = "none"; }
 
     try {
       await api.runPipeline({
@@ -1136,13 +1150,155 @@ class VoicesolateWizardApp {
       if (queueCount && worker.queue_count !== undefined && worker.queue_count !== null) {
         queueCount.innerText = `${worker.queue_count} clips pending`;
       }
+      if (worker.queue_items) {
+        this.renderStageBQueueItems(worker.queue_items);
+      }
     } else {
       // Stage A: STT Search worker
       if (this.radar) {
         this.radar.updateWorker(worker);
       }
       this.updateSTTWorkerUI(worker);
+      if (worker.queue_items) {
+        this.renderStageAQueueItems(worker.queue_items);
+      }
     }
+  }
+
+  renderStageAQueueItems(items) {
+    const container = document.getElementById("sttQueueItemsList");
+    const summary = document.getElementById("sttQueueSummary");
+    if (!container || !Array.isArray(items) || items.length === 0) return;
+
+    container.style.display = "flex";
+    const matchedCount = items.filter(it => it.state === "matched" || it.state === "completed").length;
+    if (summary) {
+      summary.innerText = `${matchedCount}/${items.length} matched`;
+    }
+
+    container.innerHTML = "";
+    items.forEach((item, idx) => {
+      const itemEl = document.createElement("div");
+      let stateClass = "";
+      let icon = "⏳";
+      let badgeClass = "idle";
+      let badgeLabel = "queued";
+
+      if (item.state === "scanning") {
+        stateClass = "active-scan";
+        icon = "⚡";
+        badgeClass = "scanning";
+        badgeLabel = "scanning";
+      } else if (item.state === "matched" || item.state === "completed") {
+        stateClass = "completed";
+        icon = "✓";
+        badgeClass = "matched";
+        badgeLabel = "matched";
+      }
+
+      itemEl.className = `queue-item ${stateClass}`;
+      const textPreview = (item.text || "").trim();
+      const shortText = textPreview.length > 34 ? textPreview.slice(0, 34) + "..." : textPreview;
+
+      itemEl.innerHTML = `
+        <div class="queue-item-header">
+          <div class="queue-item-title" title="${this.escapeHtml(textPreview)}">
+            <span>${icon}</span>
+            <span style="font-weight:600; color:#fff;">#${idx + 1}</span>
+            <span>"${this.escapeHtml(shortText)}"</span>
+          </div>
+          <span class="worker-badge ${badgeClass}">${badgeLabel}</span>
+        </div>
+        <div class="queue-item-meta">
+          <span>${item.start_sec !== undefined && item.end_sec !== undefined ? `${this.formatTime(item.start_sec)} - ${this.formatTime(item.end_sec)} (${item.duration || ''})` : (item.status_text || 'Queued')}</span>
+          <span>${item.confidence ? `${Math.round(item.confidence)}% conf` : ''}</span>
+        </div>
+      `;
+
+      if (item.start_sec !== undefined && item.end_sec !== undefined && this.radar) {
+        itemEl.onclick = () => {
+          this.radar.highlightSegment(item.start_sec, item.end_sec);
+        };
+      }
+      container.appendChild(itemEl);
+    });
+  }
+
+  renderStageBQueueItems(items) {
+    const container = document.getElementById("demucsQueueItemsList");
+    const summary = document.getElementById("demucsQueueSummary");
+    const queueCountEl = document.getElementById("demucsQueueCount");
+    if (!container || !Array.isArray(items) || items.length === 0) return;
+
+    container.style.display = "flex";
+    const completedCount = items.filter(it => it.state === "matched" || it.state === "completed").length;
+    const pendingCount = items.filter(it => it.state === "pending" || it.state === "idle").length;
+
+    if (summary) {
+      summary.innerText = `${completedCount}/${items.length} isolated`;
+    }
+    if (queueCountEl) {
+      queueCountEl.innerText = `${pendingCount} clips pending (${completedCount}/${items.length} done)`;
+    }
+
+    container.innerHTML = "";
+    items.forEach((item, idx) => {
+      const itemEl = document.createElement("div");
+      let stateClass = "";
+      let icon = "⏳";
+      let badgeClass = "idle";
+      let badgeLabel = "queued";
+
+      if (item.state === "enhancing") {
+        stateClass = "active";
+        icon = "⚡";
+        badgeClass = "enhancing";
+        badgeLabel = "isolating";
+      } else if (item.state === "matched" || item.state === "completed") {
+        stateClass = "completed";
+        icon = "✓";
+        badgeClass = "matched";
+        badgeLabel = (item.status_text && item.status_text.includes("Cached")) ? "cached" : "isolated";
+      }
+
+      itemEl.className = `queue-item ${stateClass}`;
+      const textPreview = (item.text || "").trim();
+      const shortText = textPreview.length > 32 ? textPreview.slice(0, 32) + "..." : textPreview;
+
+      itemEl.innerHTML = `
+        <div class="queue-item-header">
+          <div class="queue-item-title" title="${this.escapeHtml(textPreview)}">
+            <span>${icon}</span>
+            <span style="font-weight:600; color:#fff;">Clip ${idx + 1}</span>
+            <span>"${this.escapeHtml(shortText)}"</span>
+          </div>
+          <span class="worker-badge ${badgeClass}">${badgeLabel}</span>
+        </div>
+        <div class="queue-item-meta">
+          <span>${item.timecode || (item.start_sec !== undefined ? `${this.formatTime(item.start_sec)} - ${this.formatTime(item.end_sec)}` : '')} ${item.duration ? `(${item.duration})` : ''}</span>
+          <span>${item.status_text || ''}</span>
+        </div>
+      `;
+
+      itemEl.onclick = () => {
+        if (item.start_sec !== undefined && this.radar) {
+          this.radar.highlightSegment(item.start_sec, item.end_sec);
+        }
+        if (item.file || item.enhanced_file) {
+          this.showClipDetails({
+            character: item.character || this.selectedCharacter,
+            text: item.text,
+            start_sec: item.start_sec,
+            end_sec: item.end_sec,
+            confidence: item.confidence || 100,
+            file: item.file,
+            enhanced_file: item.enhanced_file
+          });
+        }
+      };
+
+      container.appendChild(itemEl);
+    });
   }
 
   updateSTTWorkerUI(worker) {
@@ -1257,6 +1413,11 @@ class VoicesolateWizardApp {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
+  }
+
+  escapeHtml(str) {
+    if (!str) return "";
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 }
 

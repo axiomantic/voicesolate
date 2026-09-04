@@ -276,9 +276,12 @@
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-top:4px;">
               <!-- Stage A: Search / STT Workers -->
               <div style="display:flex; flex-direction:column; gap:10px;">
-                <h4 style="font-size:12px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.8px;">
-                  Stage A: Divide-and-Conquer STT Workers
-                </h4>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <h4 style="font-size:12px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.8px;">
+                    Stage A: Divide-and-Conquer STT Workers
+                  </h4>
+                  <span id="sttQueueSummary" style="font-size:11px; font-family:var(--font-mono); color:var(--text-dim);">0 items</span>
+                </div>
                 <div class="radar-workers" id="radarWorkersContainer">
                   <div class="worker-card" id="sttWorkerCard-worker-stt-1">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -289,13 +292,18 @@
                     <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);" id="sttWorkerTime-worker-stt-1">--:--</div>
                   </div>
                 </div>
+                <!-- Stage A Itemized Queue -->
+                <div class="queue-item-list" id="sttQueueItemsList" style="display:none; flex-direction:column; gap:6px; max-height:240px; overflow-y:auto; padding-right:4px;"></div>
               </div>
 
               <!-- Stage B: Neural Enhancement Workers (Demucs v4) -->
               <div style="display:flex; flex-direction:column; gap:10px;">
-                <h4 style="font-size:12px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.8px;">
-                  Stage B: Neural Isolation (Demucs v4) Queue
-                </h4>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <h4 style="font-size:12px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.8px;">
+                    Stage B: Neural Isolation (Demucs v4) Queue
+                  </h4>
+                  <span id="demucsQueueSummary" style="font-size:11px; font-family:var(--font-mono); color:var(--text-dim);">0 items</span>
+                </div>
                 <div class="radar-workers" id="enhancementWorkersContainer">
                   <div class="worker-card" id="demucsWorkerCard">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -306,6 +314,8 @@
                     <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);" id="demucsQueueCount">0 clips pending</div>
                   </div>
                 </div>
+                <!-- Stage B Itemized Queue -->
+                <div class="queue-item-list" id="demucsQueueItemsList" style="display:none; flex-direction:column; gap:6px; max-height:240px; overflow-y:auto; padding-right:4px;"></div>
               </div>
             </div>
 

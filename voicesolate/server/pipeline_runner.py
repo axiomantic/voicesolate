@@ -158,20 +158,58 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
         cache_manager = CacheManager()
         aligner = SearchAligner(extractor, cache_manager=cache_manager)
 
+        # Build Stage A itemized queue
+        target_chars_set = set(c.upper() for c in target_chars)
+        target_dialogue_lines = [l for l in script_lines if l.character.upper() in target_chars_set]
+        stage_a_items = [
+            {
+                "id": f"stt-{i}",
+                "index": i,
+                "character": l.character,
+                "text": l.text,
+                "state": "pending",
+                "status_text": "Queued for STT"
+            }
+            for i, l in enumerate(target_dialogue_lines)
+        ]
+
         # Worker state reporter
         def on_align_step(step_info: Dict[str, Any]):
             worker_id = "worker-stt-1"
             stype = step_info.get("type", "worker_scan")
             if stype == "worker_scan":
+                line_idx = step_info.get("index")
+                if line_idx is not None and 0 <= line_idx < len(stage_a_items):
+                    for it in stage_a_items:
+                        if it["state"] == "scanning":
+                            it["state"] = "pending"
+                            it["status_text"] = "Queued for STT"
+                    stage_a_items[line_idx]["state"] = "scanning"
+                    stage_a_items[line_idx]["status_text"] = "Scanning timeline..."
+
                 job_manager.update_worker_state(
                     job_id=job_id,
                     worker_id=worker_id,
                     state="scanning",
                     chunk_start=step_info.get("start_sec", 0.0),
                     chunk_end=step_info.get("end_sec", 0.0),
-                    snippet=step_info.get("target_text", "")
+                    snippet=step_info.get("target_text", ""),
+                    queue_count=sum(1 for it in stage_a_items if it["state"] == "pending"),
+                    queue_items=stage_a_items
                 )
             elif stype == "clip_matched":
+                text_matched = step_info.get("text", "").strip()
+                for it in stage_a_items:
+                    if it["text"].strip() == text_matched or it["state"] == "scanning":
+                        it["state"] = "matched"
+                        it["status_text"] = "Matched"
+                        it["start_sec"] = step_info.get("start_sec")
+                        it["end_sec"] = step_info.get("end_sec")
+                        it["confidence"] = step_info.get("confidence")
+                        dur = round((step_info.get("end_sec", 0) - step_info.get("start_sec", 0)), 1)
+                        it["duration"] = f"{dur}s"
+                        break
+
                 job_manager.update_worker_state(
                     job_id=job_id,
                     worker_id=worker_id,
@@ -179,7 +217,9 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                     chunk_start=step_info.get("start_sec", 0.0),
                     chunk_end=step_info.get("end_sec", 0.0),
                     snippet=step_info.get("text", ""),
-                    confidence=step_info.get("confidence")
+                    confidence=step_info.get("confidence"),
+                    queue_count=sum(1 for it in stage_a_items if it["state"] == "pending"),
+                    queue_items=stage_a_items
                 )
                 job_manager.notify_clip_discovered(
                     job_id=job_id,
@@ -192,23 +232,30 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                     }
                 )
             elif stype == "cache_hit":
+                for it in stage_a_items:
+                    it["state"] = "matched"
+                    it["status_text"] = "Cached alignment"
                 job_manager.update_worker_state(
                     job_id=job_id,
                     worker_id=worker_id,
                     state="matched",
                     chunk_start=0.0,
                     chunk_end=0.0,
-                    snippet=f"Loaded {step_info.get('count', 0)} cached speech alignments"
+                    snippet=f"Loaded {step_info.get('count', 0)} cached speech alignments",
+                    queue_count=0,
+                    queue_items=stage_a_items
                 )
 
         # Signal STT Worker starting search
         job_manager.update_worker_state(
             job_id=job_id,
             worker_id="worker-stt-1",
-            state="scanning",
+            state="scanning" if stage_a_items else "idle",
             chunk_start=0.0,
             chunk_end=15.0,
-            snippet=f"Starting search for {', '.join(target_chars)}..."
+            snippet=f"Starting search for {', '.join(target_chars)} ({len(stage_a_items)} items)...",
+            queue_count=len(stage_a_items),
+            queue_items=stage_a_items
         )
 
         aligned_clips = aligner.align_character_dialogue(
@@ -226,7 +273,9 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                 state="idle",
                 chunk_start=0.0,
                 chunk_end=0.0,
-                snippet="No matching dialogue found"
+                snippet="No matching dialogue found",
+                queue_count=0,
+                queue_items=stage_a_items
             )
             job_manager.update_job(
                 job_id,
@@ -238,13 +287,19 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
             return
 
         # Stage A Completed
+        for it in stage_a_items:
+            if it["state"] != "matched":
+                it["state"] = "matched"
+                it["status_text"] = "Complete"
         job_manager.update_worker_state(
             job_id=job_id,
             worker_id="worker-stt-1",
             state="matched",
             chunk_start=0.0,
             chunk_end=0.0,
-            snippet=f"Matched {len(aligned_clips)} speech instances"
+            snippet=f"Matched {len(aligned_clips)} speech instances",
+            queue_count=0,
+            queue_items=stage_a_items
         )
 
         job_manager.update_job(
@@ -262,7 +317,24 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
         step_idx = 0
 
         # Initialize Demucs queue state
+        stage_b_items = []
         if do_enhance:
+            for idx, clip in enumerate(aligned_clips):
+                dur_s = round(clip.end_sec - clip.start_sec, 1)
+                stage_b_items.append({
+                    "id": f"demucs-{idx}",
+                    "index": idx,
+                    "character": clip.character,
+                    "text": clip.text,
+                    "timecode": clip.timecode_str,
+                    "duration": f"{dur_s}s",
+                    "start_sec": clip.start_sec,
+                    "end_sec": clip.end_sec,
+                    "confidence": clip.confidence,
+                    "state": "pending",
+                    "status_text": "Queued for Demucs"
+                })
+
             job_manager.update_worker_state(
                 job_id=job_id,
                 worker_id="worker-demucs-1",
@@ -270,7 +342,8 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                 chunk_start=0.0,
                 chunk_end=0.0,
                 snippet=f"{len(aligned_clips)} clips queued for isolation",
-                queue_count=len(aligned_clips)
+                queue_count=len(aligned_clips),
+                queue_items=stage_b_items
             )
 
         for char_name in target_chars:
@@ -303,8 +376,14 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                 enh_file = None
                 if do_enhance and enh_dir:
                     enh_file = enh_dir / f"{clip.timecode_str}_enhanced.wav"
-                    remaining_queue = max(0, len(char_clips) - (idx + 1))
+                    item_b = next((it for it in stage_b_items if it.get("timecode") == clip.timecode_str), None)
+
                     if not enh_file.exists():
+                        if item_b:
+                            item_b["state"] = "enhancing"
+                            item_b["status_text"] = "Isolating with Demucs v4..."
+
+                        remaining_queue = sum(1 for it in stage_b_items if it["state"] == "pending")
                         job_manager.update_job(
                             job_id,
                             progress=prog,
@@ -318,7 +397,8 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                             chunk_start=clip.start_sec,
                             chunk_end=clip.end_sec,
                             snippet=f"Isolating ({idx+1}/{len(char_clips)}): \"{clip.text[:30]}\"...",
-                            queue_count=remaining_queue
+                            queue_count=remaining_queue,
+                            queue_items=stage_b_items
                         )
                         enhancer.clean_and_enhance_file(
                             str(raw_file),
@@ -326,6 +406,13 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                             media_key=aligner.media_key,
                             timecode_str=clip.timecode_str
                         )
+                        if item_b:
+                            item_b["state"] = "matched"
+                            item_b["status_text"] = "✓ Isolated"
+                            item_b["enhanced_file"] = str(enh_file.resolve())
+                            item_b["file"] = str(raw_file.resolve())
+
+                        remaining_queue = sum(1 for it in stage_b_items if it["state"] == "pending")
                         job_manager.update_worker_state(
                             job_id=job_id,
                             worker_id="worker-demucs-1",
@@ -333,9 +420,17 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                             chunk_start=clip.start_sec,
                             chunk_end=clip.end_sec,
                             snippet=f"Isolated ({idx+1}/{len(char_clips)}): \"{clip.text[:30]}\"",
-                            queue_count=remaining_queue
+                            queue_count=remaining_queue,
+                            queue_items=stage_b_items
                         )
                     else:
+                        if item_b:
+                            item_b["state"] = "matched"
+                            item_b["status_text"] = "✓ Cached"
+                            item_b["enhanced_file"] = str(enh_file.resolve())
+                            item_b["file"] = str(raw_file.resolve())
+
+                        remaining_queue = sum(1 for it in stage_b_items if it["state"] == "pending")
                         job_manager.update_worker_state(
                             job_id=job_id,
                             worker_id="worker-demucs-1",
@@ -343,7 +438,8 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                             chunk_start=clip.start_sec,
                             chunk_end=clip.end_sec,
                             snippet=f"Cached: \"{clip.text[:30]}\"",
-                            queue_count=remaining_queue
+                            queue_count=remaining_queue,
+                            queue_items=stage_b_items
                         )
 
                 clip_dict = {
@@ -395,6 +491,10 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
         waveform_data = generate_macro_waveform_from_manifest(output_base_dir / "manifest.json")
 
         if do_enhance:
+            for it in stage_b_items:
+                if it["state"] == "pending":
+                    it["state"] = "matched"
+                    it["status_text"] = "✓ Complete"
             job_manager.update_worker_state(
                 job_id=job_id,
                 worker_id="worker-demucs-1",
@@ -402,7 +502,8 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                 chunk_start=0.0,
                 chunk_end=0.0,
                 snippet="Demucs isolation complete",
-                queue_count=0
+                queue_count=0,
+                queue_items=stage_b_items
             )
 
         job_manager.update_job(

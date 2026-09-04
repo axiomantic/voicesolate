@@ -174,7 +174,8 @@ class JobManager:
         chunk_end: float,
         snippet: str = "",
         confidence: Optional[float] = None,
-        queue_count: Optional[int] = None
+        queue_count: Optional[int] = None,
+        queue_items: Optional[List[Dict[str, Any]]] = None
     ):
         """
         Emits worker divide-and-conquer telemetry for the search procedure radar.
@@ -189,6 +190,7 @@ class JobManager:
             "snippet": snippet[:80] if snippet else "",
             "confidence": round(confidence, 1) if confidence is not None else None,
             "queue_count": queue_count,
+            "queue_items": queue_items,
             "updated_at": time.time()
         }
         if job:
