@@ -142,9 +142,26 @@ def main():
         sys.exit(1)
 
     # Character Selection via TUI or Args
+    valid_names = {c.name.upper(): c for c in sorted_characters}
+
     if args.character:
-        selected_characters = [c.upper() for c in args.character]
-        display_character_table([c for c in sorted_characters if c.name in selected_characters])
+        selected_characters = []
+        for c_arg in args.character:
+            c_upper = c_arg.upper().strip()
+            if c_upper in valid_names:
+                selected_characters.append(c_upper)
+            else:
+                # Fuzzy match suggestion
+                from rapidfuzz import process
+                matches = process.extract(c_upper, list(valid_names.keys()), limit=3)
+                suggestions = ", ".join(f"'{m[0]}'" for m in matches if m[1] > 60)
+                console.print(f"[bold red]Error: Character '{c_arg}' not found in script '{script_source}'![/bold red]")
+                if suggestions:
+                    console.print(f"[yellow]Did you mean: {suggestions}?[/yellow]")
+                console.print(f"[cyan]Available script characters:[/cyan] {', '.join(list(valid_names.keys())[:15])}")
+                sys.exit(1)
+
+        display_character_table([valid_names[c] for c in selected_characters])
     elif args.all_characters:
         selected_characters = [c.name for c in sorted_characters]
         display_character_table(sorted_characters)
@@ -258,10 +275,17 @@ def main():
     with open(manifest_file, "w") as f:
         json.dump(manifest, f, indent=2)
 
-    console.print(f"\n[bold green]✓ Voice extraction & isolation complete![/bold green]")
-    console.print(f"[cyan]Total clips extracted:[/cyan] {len(manifest['clips'])}")
-    console.print(f"[cyan]Output folder:[/cyan] {output_base_dir}")
-    console.print(f"[cyan]Manifest file:[/cyan] {manifest_file}\n")
+    if not manifest["clips"]:
+        console.print(Panel.fit(
+            "[bold red]⚠️ No dialogue clips were extracted![/bold red]\n"
+            f"[yellow]Reason:[/yellow] The source script ('{script_source}') did not contain aligned dialogue lines for: {', '.join(selected_characters)}.\n"
+            "[yellow]Troubleshooting Tips:[/yellow]\n"
+            "  1. If using embedded subtitles, ensure they include speaker cues (e.g. 'CLEMENS: ...').\n"
+            "  2. Or specify an official script with [bold cyan]--script <file_or_id>[/bold cyan] (e.g. [bold cyan]-s s06e01[/bold cyan]).\n"
+            "  3. Check if [bold cyan]--min-duration[/bold cyan] filtered out all lines (e.g. try [bold cyan]--min-duration 0[/bold cyan]).",
+            border_style="red"
+        ))
+        sys.exit(1)
 
     # Automated Dataset Generation & Model Packaging / Training
     if manifest["clips"]:
