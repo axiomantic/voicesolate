@@ -267,6 +267,18 @@ class DatasetBuilder:
                     best_ref = wavs_dir / f"f5_{i:04d}_{source_file.stem.replace('_enhanced', '')}.wav"
                     best_clip_text = clip["text"].strip()
 
+        # Fall back to longest available clip if no clip in 7-14s window
+        if not best_ref and clips:
+            longest_dur = -1.0
+            for i, clip in enumerate(clips):
+                source_file = self._resolve_clip_file(clip)
+                if source_file and source_file.exists():
+                    dur = sf.info(str(source_file)).duration
+                    if dur > longest_dur:
+                        longest_dur = dur
+                        best_ref = wavs_dir / f"f5_{i:04d}_{source_file.stem.replace('_enhanced', '')}.wav"
+                        best_clip_text = clip["text"].strip()
+
         if best_ref and best_ref.exists():
             shutil.copy(str(best_ref), str(ref_dir / "ref.wav"))
             with open(ref_dir / "ref.txt", "w", encoding="utf-8") as f:

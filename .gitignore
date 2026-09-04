@@ -37,6 +37,8 @@ cache/audio/
 cache/stt/
 cache/subtitles/
 cache/waveforms/
+cache/synthesized/
+.pytest_cache/
 output
 output/
 output2/
