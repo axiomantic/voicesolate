@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "voicesolate"
 version = "0.3.0"
-description = "Automated Character Dialogue Extraction & Neural Studio Audio Isolation Pipeline"
+description = "Automated Character Dialogue Extraction, Studio Audio Isolation & End-to-End TTS Voice Training (Piper, XTTS, F5-TTS)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

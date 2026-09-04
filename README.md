@@ -1,27 +1,29 @@
 # 🎙️ Voicesolate
 
-**Voicesolate** is an automated, high-fidelity character dialogue extraction and neural audio isolation pipeline. It maps script lines directly to video/audio media (local files or over remote SSH/SFTP), segments exact character lines using whole-span Levenshtein matching and sub-second Whisper word timestamps, and isolates clean, studio-grade vocal stems using GPU neural separation.
+**Voicesolate** is an automated, end-to-end character voice extraction, neural isolation, and TTS model training pipeline. It maps script lines directly to video or audio media (local files or over zero-download remote SSH/SFTP), segments exact character lines using whole-span Levenshtein matching and sub-second Whisper word timestamps, isolates studio-grade vocal stems using GPU neural separation, and **automatically packages ready-to-train datasets and fine-tunes voice models for Piper (VITS/ONNX), Coqui XTTS-v2 / Chatterbox, and F5-TTS**.
 
 ---
 
 ## ✨ Key Features
 
-1. **Remote Zero-Download Chunk Seeking (SSH/SFTP)**:
+1. **End-to-End "Media-to-Model" Pipeline**:
+   - Single command extracts character speech, masters vocal stems, builds LJSpeech/TTS datasets, configures voice profiles, and prepares models for inference.
+2. **Multi-Target TTS Support (Piper • XTTS • F5-TTS)**:
+   - **Piper (VITS / ONNX)**: Generates 22,050 Hz LJSpeech dataset + `metadata.csv` for ultra-low latency CPU deployment (e.g. Home Assistant / Raspberry Pi).
+   - **Coqui XTTS-v2 / Chatterbox**: Formats 24kHz dataset + auto-selects pristine reference prompt packs for immediate zero-shot or fine-tuned cloning.
+   - **F5-TTS**: Formats 24kHz diffusion dataset + optimal prompt audio/text for flow-matching DiT cloning.
+3. **Interactive Model Audition TUI**:
+   - Built-in terminal suite to audition trained models, test custom or classic Mark Twain dialogue, tweak speech parameters (speed, temperature, NFE steps), and listen live.
+4. **Remote Zero-Download Chunk Seeking (SSH/SFTP)**:
    - Slices and processes audio chunks on-the-fly over SSH without downloading multi-gigabyte video files.
-2. **Multi-Channel Discrete Dialogue Isolation**:
+5. **Multi-Channel Discrete Dialogue Isolation**:
    - For 5.1/7.1 surround mixes, pulls discrete Front Center (`FC`) dialogue with **zero comb filtering** and zero destructive phase arithmetic.
-3. **Whole-Span Levenshtein & Context Window Alignment**:
-   - Uses normalized Levenshtein ratios on candidate subtitle spans to eliminate wrong-character bleed (e.g. short words like *"Starship?"* inside another character's sentence).
-   - Expands candidate zones into a context window ($[-2.0\text{s}, +1.5\text{s}]$) to capture full conversational turns.
-4. **Sub-Second Whisper Word-Level Snapping**:
-   - Integrates local `faster-whisper` to snap start and end timestamps directly to the exact words spoken by the character.
-5. **GPU Neural Stem Separation (Meta HTDemucs)**:
-   - Eliminates background music and ambient effects using Apple Silicon GPU / CUDA with test-time shift averaging (`shifts=2, overlap=0.25`).
-6. **Zero-Gating Natural Dynamic Mastering**:
-   - No aggressive noise gates (`agate`) or artificial energy duckers. Dialogue tails, natural room decay, and breath dynamics are preserved cleanly.
-7. **Multi-Tier Persistent Caching (`CacheManager`)**:
-   - Caches Whisper context window transcripts, word timestamps, and full character alignments in `cache/stt/`.
-   - Repeated runs resolve in **under 0.5 seconds**!
+6. **Sub-Second Whisper Word Snapping & Energy Valley Detection**:
+   - Snaps start/end boundaries directly to spoken words and silence gaps, eliminating adjacent speaker bleed.
+7. **GPU Neural Stem Separation (Meta HTDemucs)**:
+   - Eliminates background music and ambient sound effects using Apple Silicon GPU / CUDA with test-time shift averaging (`shifts=2, overlap=0.25`).
+8. **Re-entrant, Idempotent & Granular Caching (`CacheManager`)**:
+   - Caches Whisper STT, alignments, audio slices, and neural stems. Failed or resumed runs re-use existing files instantly. Includes granular bypass flags (`--no-cache-stt`, `--no-cache-align`, `--no-cache-audio`, `--no-cache-enhance`, `--no-cache-script`).
 
 ---
 
