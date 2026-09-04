@@ -173,11 +173,12 @@ class JobManager:
         chunk_start: float,
         chunk_end: float,
         snippet: str = "",
-        confidence: Optional[float] = None
+        confidence: Optional[float] = None,
+        queue_count: Optional[int] = None
     ):
         """
         Emits worker divide-and-conquer telemetry for the search procedure radar.
-        States: 'scanning', 'snapping', 'matched', 'idle', 'error'
+        States: 'scanning', 'snapping', 'matched', 'idle', 'error', 'enhancing'
         """
         job = self.jobs.get(job_id)
         worker_info = {
@@ -187,6 +188,7 @@ class JobManager:
             "chunk_end": round(chunk_end, 2),
             "snippet": snippet[:80] if snippet else "",
             "confidence": round(confidence, 1) if confidence is not None else None,
+            "queue_count": queue_count,
             "updated_at": time.time()
         }
         if job:

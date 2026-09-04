@@ -132,6 +132,16 @@ class AudioExtractor:
         """Alias for extract_embedded_subtitles."""
         return self.extract_embedded_subtitles(output_srt_path)
 
+    def extract_slice(self, start_sec: float, duration_or_end_sec: float, output_path: str):
+        """
+        Extracts an audio slice directly to an output wav file.
+        Accepts duration_sec (if < start_sec) or end_sec (if > start_sec).
+        """
+        if duration_or_end_sec > start_sec:
+            return self.export_clip(start_sec, duration_or_end_sec, output_path)
+        else:
+            return self.export_clip(start_sec, start_sec + duration_or_end_sec, output_path)
+
     def extract_slice_pcm(self, start_sec: float, duration_sec: float, sample_rate: int = 16000) -> bytes:
         """Fast partial chunk extraction (16kHz mono) for Wyoming STT probing."""
         target = self.remote_file_path if self.is_remote else str(self.local_path)

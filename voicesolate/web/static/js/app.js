@@ -488,6 +488,21 @@ class VoicesolateWizardApp {
           const radarClipsEl = document.getElementById("radarClipsCount");
           if (radarClipsEl) radarClipsEl.innerText = "0 clips";
 
+          // Reset worker telemetry cards
+          const sttBadge = document.getElementById("sttWorkerBadge-worker-stt-1");
+          const sttSnippet = document.getElementById("sttWorkerSnippet-worker-stt-1");
+          const sttTime = document.getElementById("sttWorkerTime-worker-stt-1");
+          if (sttBadge) { sttBadge.className = "worker-badge idle"; sttBadge.innerText = "idle"; }
+          if (sttSnippet) { sttSnippet.innerText = "Awaiting extraction start..."; }
+          if (sttTime) { sttTime.innerText = "--:--"; }
+
+          const demucsBadge = document.getElementById("demucsBadge");
+          const demucsSnippet = document.getElementById("demucsSnippet");
+          const demucsQueue = document.getElementById("demucsQueueCount");
+          if (demucsBadge) { demucsBadge.className = "worker-badge idle"; demucsBadge.innerText = "idle"; }
+          if (demucsSnippet) { demucsSnippet.innerText = "Queue empty"; }
+          if (demucsQueue) { demucsQueue.innerText = "0 clips pending"; }
+
           const extStatusEl = document.getElementById("step2ExtractionStatusText");
           if (extStatusEl) extStatusEl.innerText = "Audio cache cleared. Ready to search.";
 
@@ -615,6 +630,21 @@ class VoicesolateWizardApp {
 
     if (startBtn) startBtn.disabled = true;
     if (statusText) statusText.innerText = "⏳ Queuing divide-and-conquer search...";
+
+    // Activate Stage A and Stage B worker telemetry cards
+    const sttBadge = document.getElementById("sttWorkerBadge-worker-stt-1");
+    const sttSnippet = document.getElementById("sttWorkerSnippet-worker-stt-1");
+    const sttTime = document.getElementById("sttWorkerTime-worker-stt-1");
+    if (sttBadge) { sttBadge.className = "worker-badge scanning"; sttBadge.innerText = "scanning"; }
+    if (sttSnippet) { sttSnippet.innerText = "Initializing divide-and-conquer speech search..."; }
+    if (sttTime) { sttTime.innerText = "Timeline: 0:00..."; }
+
+    const demucsBadge = document.getElementById("demucsBadge");
+    const demucsSnippet = document.getElementById("demucsSnippet");
+    const demucsQueue = document.getElementById("demucsQueueCount");
+    if (demucsBadge) { demucsBadge.className = "worker-badge idle"; demucsBadge.innerText = "queued"; }
+    if (demucsSnippet) { demucsSnippet.innerText = "Waiting for alignment matches..."; }
+    if (demucsQueue) { demucsQueue.innerText = "Queue waiting"; }
 
     try {
       await api.runPipeline({
@@ -1089,20 +1119,68 @@ class VoicesolateWizardApp {
   }
 
   handleWorkerEvent(worker) {
-    if (!worker) return;
-    if (worker.worker_id === "worker-demucs-1") {
-      // Demucs Enhancement worker
+    if (!worker || !worker.worker_id) return;
+
+    if (worker.worker_id.startsWith("worker-demucs") || worker.worker_id === "worker-demucs-1") {
+      // Stage B: Demucs Enhancement worker
       const badge = document.getElementById("demucsBadge");
       const snippet = document.getElementById("demucsSnippet");
+      const queueCount = document.getElementById("demucsQueueCount");
       if (badge) {
         badge.className = `worker-badge ${worker.state}`;
         badge.innerText = worker.state;
       }
-      if (snippet) snippet.innerText = worker.snippet || "Isolating vocal stem...";
+      if (snippet) {
+        snippet.innerText = worker.snippet || "Isolating vocal stem...";
+      }
+      if (queueCount && worker.queue_count !== undefined && worker.queue_count !== null) {
+        queueCount.innerText = `${worker.queue_count} clips pending`;
+      }
     } else {
-      // STT Search worker
+      // Stage A: STT Search worker
       if (this.radar) {
         this.radar.updateWorker(worker);
+      }
+      this.updateSTTWorkerUI(worker);
+    }
+  }
+
+  updateSTTWorkerUI(worker) {
+    const container = document.getElementById("radarWorkersContainer");
+    if (!container) return;
+
+    let card = document.getElementById(`sttWorkerCard-${worker.worker_id}`);
+    if (!card) {
+      card = document.createElement("div");
+      card.className = "worker-card";
+      card.id = `sttWorkerCard-${worker.worker_id}`;
+      card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-weight:600; color:#fff;">${worker.worker_id}</span>
+          <span class="worker-badge ${worker.state}" id="sttWorkerBadge-${worker.worker_id}">${worker.state}</span>
+        </div>
+        <div style="font-size:12px; color:var(--text-muted);" id="sttWorkerSnippet-${worker.worker_id}"></div>
+        <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);" id="sttWorkerTime-${worker.worker_id}"></div>
+      `;
+      container.appendChild(card);
+    }
+
+    const badge = document.getElementById(`sttWorkerBadge-${worker.worker_id}`);
+    const snippet = document.getElementById(`sttWorkerSnippet-${worker.worker_id}`);
+    const timeEl = document.getElementById(`sttWorkerTime-${worker.worker_id}`);
+
+    if (badge) {
+      badge.className = `worker-badge ${worker.state}`;
+      badge.innerText = worker.state;
+    }
+    if (snippet) {
+      snippet.innerText = worker.snippet || (worker.state === "scanning" ? "Scanning audio timeline..." : "Matched");
+    }
+    if (timeEl && worker.chunk_start !== undefined) {
+      if (worker.chunk_end > worker.chunk_start) {
+        timeEl.innerText = `Timeline: ${this.formatTime(worker.chunk_start)} - ${this.formatTime(worker.chunk_end)}`;
+      } else {
+        timeEl.innerText = "";
       }
     }
   }

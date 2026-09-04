@@ -435,6 +435,18 @@ body {
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
+.worker-badge.enhancing {
+  background: rgba(6, 182, 212, 0.2);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.worker-badge.error {
+  background: rgba(244, 63, 94, 0.2);
+  color: var(--accent-rose);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
 /* Clip Inspector */
 .clip-inspector {
   background: #0c1324;

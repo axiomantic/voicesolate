@@ -115,6 +115,12 @@ class SearchAligner:
 
         if all_cached and cached_clips:
             print(f"✓ Loaded {len(cached_clips)} aligned clips from persistent alignment cache.")
+            if callback:
+                callback({
+                    "type": "cache_hit",
+                    "count": len(cached_clips),
+                    "character": target_characters[0] if target_characters else ""
+                })
             return cached_clips
 
         target_chars_set = set(c.upper() for c in target_characters)

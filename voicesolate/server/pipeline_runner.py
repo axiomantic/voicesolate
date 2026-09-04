@@ -181,6 +181,35 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                     snippet=step_info.get("text", ""),
                     confidence=step_info.get("confidence")
                 )
+                job_manager.notify_clip_discovered(
+                    job_id=job_id,
+                    clip_data={
+                        "character": step_info.get("character"),
+                        "text": step_info.get("text"),
+                        "start_sec": step_info.get("start_sec"),
+                        "end_sec": step_info.get("end_sec"),
+                        "confidence": step_info.get("confidence")
+                    }
+                )
+            elif stype == "cache_hit":
+                job_manager.update_worker_state(
+                    job_id=job_id,
+                    worker_id=worker_id,
+                    state="matched",
+                    chunk_start=0.0,
+                    chunk_end=0.0,
+                    snippet=f"Loaded {step_info.get('count', 0)} cached speech alignments"
+                )
+
+        # Signal STT Worker starting search
+        job_manager.update_worker_state(
+            job_id=job_id,
+            worker_id="worker-stt-1",
+            state="scanning",
+            chunk_start=0.0,
+            chunk_end=15.0,
+            snippet=f"Starting search for {', '.join(target_chars)}..."
+        )
 
         aligned_clips = aligner.align_character_dialogue(
             all_script_lines=script_lines,
@@ -191,6 +220,14 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
         )
 
         if not aligned_clips:
+            job_manager.update_worker_state(
+                job_id=job_id,
+                worker_id="worker-stt-1",
+                state="idle",
+                chunk_start=0.0,
+                chunk_end=0.0,
+                snippet="No matching dialogue found"
+            )
             job_manager.update_job(
                 job_id,
                 progress=100.0,
@@ -199,6 +236,16 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                 message=f"No matching dialogue lines found for {', '.join(target_chars)}."
             )
             return
+
+        # Stage A Completed
+        job_manager.update_worker_state(
+            job_id=job_id,
+            worker_id="worker-stt-1",
+            state="matched",
+            chunk_start=0.0,
+            chunk_end=0.0,
+            snippet=f"Matched {len(aligned_clips)} speech instances"
+        )
 
         job_manager.update_job(
             job_id,
@@ -214,6 +261,18 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
 
         total_steps = len(target_chars) * len(aligned_clips)
         step_idx = 0
+
+        # Initialize Demucs queue state
+        if do_enhance:
+            job_manager.update_worker_state(
+                job_id=job_id,
+                worker_id="worker-demucs-1",
+                state="idle",
+                chunk_start=0.0,
+                chunk_end=0.0,
+                snippet=f"{len(aligned_clips)} clips queued for isolation",
+                queue_count=len(aligned_clips)
+            )
 
         for char_name in target_chars:
             if job_manager.is_cancelled(job_id):
@@ -245,6 +304,7 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                 enh_file = None
                 if do_enhance and enh_dir:
                     enh_file = enh_dir / f"{clip.timecode_str}_enhanced.wav"
+                    remaining_queue = max(0, len(char_clips) - (idx + 1))
                     if not enh_file.exists():
                         job_manager.update_job(
                             job_id,
@@ -258,7 +318,8 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                             state="enhancing",
                             chunk_start=clip.start_sec,
                             chunk_end=clip.end_sec,
-                            snippet=f"Isolating ({idx+1}/{len(char_clips)}): {clip.text[:35]}..."
+                            snippet=f"Isolating ({idx+1}/{len(char_clips)}): \"{clip.text[:30]}\"...",
+                            queue_count=remaining_queue
                         )
                         enhancer.clean_and_enhance_file(
                             str(raw_file),
@@ -272,7 +333,18 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
                             state="matched",
                             chunk_start=clip.start_sec,
                             chunk_end=clip.end_sec,
-                            snippet=f"Isolated: {clip.text[:35]}..."
+                            snippet=f"Isolated ({idx+1}/{len(char_clips)}): \"{clip.text[:30]}\"",
+                            queue_count=remaining_queue
+                        )
+                    else:
+                        job_manager.update_worker_state(
+                            job_id=job_id,
+                            worker_id="worker-demucs-1",
+                            state="matched",
+                            chunk_start=clip.start_sec,
+                            chunk_end=clip.end_sec,
+                            snippet=f"Cached: \"{clip.text[:30]}\"",
+                            queue_count=remaining_queue
                         )
 
                 clip_dict = {
@@ -313,6 +385,17 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
         # Generate macro-waveform data
         waveform_data = generate_macro_waveform_from_manifest(output_base_dir / "manifest.json")
 
+        if do_enhance:
+            job_manager.update_worker_state(
+                job_id=job_id,
+                worker_id="worker-demucs-1",
+                state="matched",
+                chunk_start=0.0,
+                chunk_end=0.0,
+                snippet="Demucs isolation complete",
+                queue_count=0
+            )
+
         job_manager.update_job(
             job_id,
             progress=100.0,
@@ -329,6 +412,24 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
 
     except Exception as e:
         logger.exception("Pipeline job failed")
+        job_manager.update_worker_state(
+            job_id=job_id,
+            worker_id="worker-stt-1",
+            state="error",
+            chunk_start=0.0,
+            chunk_end=0.0,
+            snippet=f"Failed: {str(e)[:40]}"
+        )
+        if do_enhance:
+            job_manager.update_worker_state(
+                job_id=job_id,
+                worker_id="worker-demucs-1",
+                state="error",
+                chunk_start=0.0,
+                chunk_end=0.0,
+                snippet="Aborted due to error",
+                queue_count=0
+            )
         job_manager.update_job(
             job_id,
             progress=100.0,
