@@ -9,13 +9,12 @@ from typing import Dict, Any, List, Optional
 
 class VoiceStudioGUI:
     """
-    Modern Gradio-based interactive testing and audition studio for Voicesolate.
+    Clean, Modern Voice Studio GUI for Voicesolate.
     Features:
-    - Side-by-side reference audio vs synthesized speech comparison
-    - Waveform scrubbers and native audio playback
-    - Real-time parameter tuning (Speed, Temperature, Diffusion Steps)
-    - Dropdown of Mark Twain quotes + custom text prompt area
-    - Multi-model switcher: Piper (VITS), Coqui XTTS-v2, F5-TTS
+    - Real-time Engine Installation & Status Badges
+    - Clear division between Reference Audio and Synthesized Audio
+    - Streamlined controls without visual clutter
+    - Multi-model switcher (Piper, XTTS, F5-TTS) with parameter sliders
     """
 
     DEFAULT_QUOTES = [
@@ -33,176 +32,213 @@ class VoiceStudioGUI:
         self.models_dir = self.char_dir / "models"
         self.datasets_dir = self.char_dir / "datasets"
 
-    def get_models_meta(self) -> Dict[str, Dict[str, Any]]:
-        models = {}
+    def check_engine_status(self) -> Dict[str, Dict[str, Any]]:
+        """Checks if each TTS engine is installed and ready."""
+        status = {}
 
-        # 1. Piper
-        piper_cfg = self.models_dir / "piper" / "voice.json"
+        # Piper
+        has_piper_bin = shutil.which("piper") is not None
         piper_onnx = list((self.models_dir / "piper").glob("*.onnx"))
-        if piper_cfg.exists() or piper_onnx:
-            piper_wavs = list((self.datasets_dir / "piper" / "wavs").glob("*.wav"))
-            models["Piper (VITS / ONNX)"] = {
-                "key": "piper",
-                "onnx": str(piper_onnx[0]) if piper_onnx else None,
-                "config": str(piper_cfg),
-                "ref_audio": str(piper_wavs[0]) if piper_wavs else None,
-                "sample_rate": 22050,
-                "desc": "Ultra-low latency CPU neural synthesis (LJSpeech format)"
-            }
+        status["Piper (VITS / ONNX)"] = {
+            "key": "piper",
+            "installed": has_piper_bin or bool(piper_onnx),
+            "model_ready": bool(piper_onnx),
+            "install_cmd": "pip install piper-tts",
+            "status_text": "🟢 Ready" if (has_piper_bin and piper_onnx) else ("🟡 Dataset Ready (Model Not Compiled)" if not piper_onnx else "🔴 Binary Missing"),
+            "desc": "Ultra-low latency CPU neural synthesis (22.05kHz LJSpeech)"
+        }
 
-        # 2. XTTS / Chatterbox
-        xtts_cfg = self.models_dir / "xtts" / "speaker_profile.json"
-        if xtts_cfg.exists():
-            try:
-                with open(xtts_cfg) as f:
-                    d = json.load(f)
-                refs = d.get("reference_audio", [])
-                models["Coqui XTTS-v2 / Chatterbox"] = {
-                    "key": "xtts",
-                    "config": str(xtts_cfg),
-                    "ref_audio": refs[0] if refs else None,
-                    "all_refs": refs,
-                    "sample_rate": 24000,
-                    "desc": "24kHz multi-lingual autoregressive + diffusion voice cloning"
-                }
-            except Exception:
-                pass
+        # XTTS
+        has_tts = shutil.which("tts") is not None
+        try:
+            import TTS
+            has_tts = True
+        except ImportError:
+            pass
+        status["Coqui XTTS-v2"] = {
+            "key": "xtts",
+            "installed": has_tts,
+            "model_ready": True,
+            "install_cmd": "pip install TTS",
+            "status_text": "🟢 Ready" if has_tts else "🔴 Not Installed (`pip install TTS`)",
+            "desc": "24kHz autoregressive + diffusion voice clone"
+        }
 
-        # 3. F5-TTS
-        f5_cfg = self.models_dir / "f5tts" / "f5_profile.json"
-        if f5_cfg.exists():
-            try:
-                with open(f5_cfg) as f:
-                    d = json.load(f)
-                models["F5-TTS (Flow-Matching DiT)"] = {
-                    "key": "f5tts",
-                    "config": str(f5_cfg),
-                    "ref_audio": d.get("ref_audio"),
-                    "ref_text": d.get("ref_text", ""),
-                    "sample_rate": 24000,
-                    "desc": "State-of-the-art non-autoregressive diffusion transformer"
-                }
-            except Exception:
-                pass
+        # F5-TTS
+        has_f5 = shutil.which("f5-tts_infer-cli") is not None
+        try:
+            import f5_tts
+            has_f5 = True
+        except ImportError:
+            pass
+        status["F5-TTS (Flow-Matching)"] = {
+            "key": "f5tts",
+            "installed": has_f5,
+            "model_ready": True,
+            "install_cmd": "pip install f5-tts",
+            "status_text": "🟢 Ready" if has_f5 else "🔴 Not Installed (`pip install f5-tts`)",
+            "desc": "Non-autoregressive flow-matching Diffusion Transformer"
+        }
 
-        return models
+        return status
 
-    def synthesize(self, model_name: str, text: str, speed: float, temperature: float) -> Optional[str]:
-        """Runs test inference for the selected TTS model."""
-        models = self.get_models_meta()
-        meta = models.get(model_name)
-        if not meta:
-            return None
+    def get_reference_audio(self) -> Optional[str]:
+        """Returns the best reference audio clip for the character."""
+        # Check F5 reference first
+        f5_ref = self.datasets_dir / "f5tts" / "ref_audio" / "ref.wav"
+        if f5_ref.exists():
+            return str(f5_ref)
 
-        key = meta["key"]
-        tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+        # Check XTTS reference
+        xtts_refs = list((self.datasets_dir / "xtts" / "reference_audio").glob("*.wav"))
+        if xtts_refs:
+            return str(xtts_refs[0])
 
-        if key == "piper":
-            piper_bin = shutil.which("piper")
-            if meta.get("onnx") and piper_bin:
-                cmd = f"echo {subprocess.list2cmdline([text])} | {piper_bin} --model {meta['onnx']} --output_file {tmp_wav}"
-                subprocess.run(cmd, shell=True, check=True)
-                return tmp_wav
-            else:
-                # If no compiled ONNX yet, return pristine reference audio for comparison
-                return meta.get("ref_audio")
-
-        elif key == "xtts":
-            # For reference pack auditioning
-            return meta.get("ref_audio")
-
-        elif key == "f5tts":
-            return meta.get("ref_audio")
+        # Check piper wavs
+        piper_wavs = list((self.datasets_dir / "piper" / "wavs").glob("*.wav"))
+        if piper_wavs:
+            return str(piper_wavs[0])
 
         return None
+
+    def synthesize(self, engine_name: str, text: str, speed: float, temp: float) -> tuple[Optional[str], str]:
+        """Runs test synthesis or reports engine status."""
+        status_map = self.check_engine_status()
+        engine_info = status_map.get(engine_name, {})
+        key = engine_info.get("key")
+
+        if not engine_info.get("installed"):
+            msg = f"⚠️ {engine_name} is not installed in the environment.\nRun: `{engine_info.get('install_cmd')}` to enable live synthesis."
+            return None, msg
+
+        tmp_out = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+
+        try:
+            if key == "piper":
+                onnx_models = list((self.models_dir / "piper").glob("*.onnx"))
+                if not onnx_models:
+                    return None, "⚠️ Piper LJSpeech dataset is ready, but .onnx model has not been compiled yet."
+                cmd = f"echo {subprocess.list2cmdline([text])} | piper --model {onnx_models[0]} --output_file {tmp_out}"
+                subprocess.run(cmd, shell=True, check=True)
+                return tmp_out, f"✓ Synthesized successfully with {engine_name} at {speed:.2f}x speed."
+
+            elif key == "f5tts":
+                ref_wav = self.get_reference_audio()
+                ref_text = "Madam, I'd be delighted. So, this is a space ship? You ever run into Halley's comet?"
+                cmd = [
+                    "f5-tts_infer-cli",
+                    "--ref_audio", str(ref_wav),
+                    "--ref_text", ref_text,
+                    "--gen_text", text,
+                    "--output_file", tmp_out,
+                    "--speed", str(speed)
+                ]
+                subprocess.run(cmd, check=True)
+                return tmp_out, f"✓ Synthesized with F5-TTS!"
+
+            elif key == "xtts":
+                ref_wav = self.get_reference_audio()
+                cmd = [
+                    "tts", "--model_name", "tts_models/multilingual/multi-dataset/xtts_v2",
+                    "--text", text,
+                    "--speaker_wav", str(ref_wav),
+                    "--language_idx", "en",
+                    "--out_path", tmp_out
+                ]
+                subprocess.run(cmd, check=True)
+                return tmp_out, f"✓ Synthesized with XTTS-v2!"
+
+        except Exception as e:
+            return None, f"❌ Error during synthesis: {e}"
+
+        return None, "Engine not supported."
 
     def launch(self, server_port: int = 7860, inbrowser: bool = True):
         import gradio as gr
 
-        models = self.get_models_meta()
-        model_names = list(models.keys())
-        if not model_names:
-            print("No models or reference packs available to audition.")
-            return
+        status_map = self.check_engine_status()
+        engine_choices = list(status_map.keys())
+        ref_audio_file = self.get_reference_audio()
 
-        initial_model = model_names[0]
-        initial_ref = models[initial_model].get("ref_audio")
+        # Count training clips
+        num_piper = len(list((self.datasets_dir / "piper" / "wavs").glob("*.wav")))
+        num_xtts = len(list((self.datasets_dir / "xtts" / "wavs").glob("*.wav")))
 
-        theme = gr.themes.Soft(
-            primary_hue="cyan",
-            neutral_hue="slate",
-        )
+        custom_css = """
+        .gradio-container { max-width: 1100px !important; margin: auto; }
+        .status-box { padding: 12px; border-radius: 8px; background: #1e293b; margin-bottom: 12px; }
+        """
 
-        with gr.Blocks(title=f"Voicesolate — {self.char_name} Voice Studio", theme=theme) as demo:
+        with gr.Blocks(title=f"Voicesolate Studio — {self.char_name}", css=custom_css, theme=gr.themes.Base()) as demo:
             gr.Markdown(f"""
-            # 🎙️ Voicesolate — Voice Audition & Tuning Studio
-            ### Target Character: **{self.char_name}**
-            Audition clean reference prompts, synthesize test quotes, and tweak model parameters live.
+            # 🎙️ Voicesolate — {self.char_name} Voice Studio
+            **Training Dataset Size:** {num_piper} isolated vocal clips ($\ge 5.0\text{s}$) | **Formats Ready:** Piper (LJSpeech), XTTS-v2, F5-TTS
             """)
 
             with gr.Row():
-                with gr.Column(scale=1):
-                    model_selector = gr.Dropdown(
-                        choices=model_names,
-                        value=initial_model,
-                        label="Select TTS Engine / Architecture"
+                # LEFT COLUMN: Prompt & Settings
+                with gr.Column(scale=5):
+                    gr.Markdown("### 1. Select Engine")
+                    engine_dropdown = gr.Dropdown(
+                        choices=engine_choices,
+                        value=engine_choices[0],
+                        label="TTS Engine Architecture"
                     )
-                    model_info = gr.Markdown(f"**Architecture Info:** {models[initial_model]['desc']}")
 
-                    gr.Markdown("### ⚙️ Engine Tuning")
-                    speed_slider = gr.Slider(minimum=0.5, maximum=2.0, value=1.0, step=0.05, label="Speech Speed")
-                    temp_slider = gr.Slider(minimum=0.1, maximum=1.0, value=0.75, step=0.05, label="Sampling Temperature (XTTS)")
+                    engine_badge = gr.Markdown(f"**Engine Status:** {status_map[engine_choices[0]]['status_text']}")
 
-                    quote_dropdown = gr.Dropdown(
+                    gr.Markdown("### 2. Test Dialogue")
+                    quote_picker = gr.Dropdown(
                         choices=self.DEFAULT_QUOTES,
                         value=self.DEFAULT_QUOTES[0],
-                        label="Select Pre-loaded Mark Twain Quote"
+                        label="Pre-loaded Mark Twain Aphorisms"
                     )
-
-                    text_input = gr.Textbox(
-                        lines=4,
+                    prompt_text = gr.Textbox(
+                        lines=3,
                         value=self.DEFAULT_QUOTES[0],
-                        label="Text Prompt to Synthesize"
+                        label="Custom Speech Text"
                     )
 
-                    synth_btn = gr.Button("▶️ Synthesize Speech", variant="primary", size="lg")
+                    with gr.Accordion("⚙️ Advanced Speech Parameters", open=False):
+                        speed_slider = gr.Slider(minimum=0.5, maximum=2.0, value=1.0, step=0.05, label="Speech Speed")
+                        temp_slider = gr.Slider(minimum=0.1, maximum=1.0, value=0.75, step=0.05, label="Temperature (XTTS)")
 
-                with gr.Column(scale=1):
-                    gr.Markdown("### 🎧 Voice Audition & Comparison")
-                    ref_audio_player = gr.Audio(
-                        value=initial_ref,
-                        label="Curated Actor Reference Prompt (Mastered 48kHz Neural Stem)",
+                    synth_button = gr.Button("▶️ Synthesize Voice", variant="primary", size="lg")
+                    status_message = gr.Markdown("")
+
+                # RIGHT COLUMN: Audio Playback & Comparison
+                with gr.Column(scale=5):
+                    gr.Markdown("### 🎧 Voice Audition")
+                    
+                    gr.Markdown("**Actor Reference Voice Prompt** *(Cleaned & Mastered Neural Stem)*")
+                    ref_player = gr.Audio(
+                        value=ref_audio_file,
+                        label="Pristine Voice Reference (Used to train / clone)",
                         type="filepath",
                         interactive=False
                     )
 
-                    synth_audio_player = gr.Audio(
-                        label="Synthesized Audio Output",
+                    gr.Markdown("**Model Synthesis Output**")
+                    output_player = gr.Audio(
+                        label="Generated Audio Result",
                         type="filepath",
                         interactive=False
                     )
 
-            # Event handlers
-            def on_quote_change(q):
-                return q
+            # Wire up reactive events
+            quote_picker.change(fn=lambda q: q, inputs=[quote_picker], outputs=[prompt_text])
 
-            quote_dropdown.change(fn=on_quote_change, inputs=[quote_dropdown], outputs=[text_input])
+            def on_engine_select(eng):
+                stat = self.check_engine_status().get(eng, {})
+                return f"**Engine Status:** {stat.get('status_text', 'Unknown')}\n*{stat.get('desc', '')}*"
 
-            def on_model_change(m):
-                m_meta = models[m]
-                return m_meta["desc"], m_meta.get("ref_audio")
+            engine_dropdown.change(fn=on_engine_select, inputs=[engine_dropdown], outputs=[engine_badge])
 
-            model_selector.change(
-                fn=on_model_change,
-                inputs=[model_selector],
-                outputs=[model_info, ref_audio_player]
-            )
-
-            synth_btn.click(
+            synth_button.click(
                 fn=self.synthesize,
-                inputs=[model_selector, text_input, speed_slider, temp_slider],
-                outputs=[synth_audio_player]
+                inputs=[engine_dropdown, prompt_text, speed_slider, temp_slider],
+                outputs=[output_player, status_message]
             )
 
-        print(f"\nLaunching Voicesolate Voice Studio at http://localhost:{server_port}")
+        print(f"\nLaunching Clean Voice Studio at http://localhost:{server_port}")
         demo.launch(server_port=server_port, inbrowser=inbrowser, quiet=True)
