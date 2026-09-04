@@ -337,6 +337,16 @@ class VoicesolateApp {
       document.getElementById("jobTitleText").innerText = `✓ ${job.message}`;
       document.getElementById("jobProgressFill").style.width = "100%";
       document.getElementById("jobPercentText").innerText = "100%";
+
+      if (job.job_type === "scan" && job.result && job.result.characters) {
+        this.renderDiscoveredCharacters(job.result.characters, job.params ? job.params.input_path : "", job.params ? job.params.script_path : "");
+        const modalStatusText = document.getElementById("modalScanStatusText");
+        const pipeStatusText = document.getElementById("pipelineScanStatusText");
+        const statusMsg = `✓ Found ${job.result.characters.length} characters (${job.result.duration}s audio)`;
+        if (modalStatusText) modalStatusText.innerText = statusMsg;
+        if (pipeStatusText) pipeStatusText.innerText = statusMsg;
+      }
+
       setTimeout(() => {
         banner.classList.remove("active");
         this.loadEpisodes();
@@ -374,7 +384,105 @@ class VoicesolateApp {
     `;
   }
 
+  renderDiscoveredCharacters(characters, inputPath, scriptPath) {
+    const renderTable = (tbodyId, containerId) => {
+      const tbody = document.getElementById(tbodyId);
+      const container = document.getElementById(containerId);
+      if (!tbody || !container) return;
+
+      tbody.innerHTML = "";
+      if (!characters || characters.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='4' style='text-align:center; color:var(--text-dim);'>No speaking characters discovered.</td></tr>";
+        container.style.display = "flex";
+        return;
+      }
+
+      characters.forEach(char => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><strong style="color:#fff;">${char.name}</strong></td>
+          <td><span class="badge badge-ready">${char.lines} lines</span></td>
+          <td style="font-family:var(--font-mono);">${char.estimated_duration_min} min (${char.estimated_duration_sec}s)</td>
+          <td>
+            <button class="btn btn-primary btn-sm extract-char-btn" data-char="${char.name}" style="padding:4px 10px; font-size:12px;">
+              ⚡ Extract &amp; Isolate
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      tbody.querySelectorAll(".extract-char-btn").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const charName = btn.getAttribute("data-char");
+          btn.disabled = true;
+          btn.innerText = "⏳ Queuing...";
+          try {
+            await api.runPipeline({
+              input_path: inputPath,
+              script_path: scriptPath || null,
+              characters: [charName],
+              enhance: true,
+              targets: ["all"]
+            });
+            // Close modal if open
+            const modal = document.getElementById("ingestMediaModal");
+            if (modal) modal.classList.remove("open");
+          } catch (err) {
+            alert("Extraction failed: " + err.message);
+            btn.disabled = false;
+            btn.innerText = "⚡ Extract & Isolate";
+          }
+        });
+      });
+
+      container.style.display = "flex";
+    };
+
+    renderTable("modalCharactersTbody", "modalDiscoveredContainer");
+    renderTable("pipelineCharactersTbody", "pipelineDiscoveredContainer");
+  }
+
   setupEventListeners() {
+    // Ingest Modal Open & Close
+    const openModalBtn = document.getElementById("openIngestModalBtn");
+    const closeModalBtn = document.getElementById("closeIngestModalBtn");
+    const closeFooterBtn = document.getElementById("modalCloseFooterBtn");
+    const ingestModal = document.getElementById("ingestMediaModal");
+
+    if (openModalBtn && ingestModal) {
+      openModalBtn.addEventListener("click", () => {
+        ingestModal.classList.add("open");
+      });
+    }
+
+    const closeModal = () => {
+      if (ingestModal) ingestModal.classList.remove("open");
+    };
+    if (closeModalBtn) closeModalBtn.addEventListener("click", closeModal);
+    if (closeFooterBtn) closeFooterBtn.addEventListener("click", closeModal);
+
+    // Preset Chips Click Handling
+    document.querySelectorAll(".preset-chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        const p = chip.getAttribute("data-path");
+        const s = chip.getAttribute("data-script");
+        const c = chip.getAttribute("data-char");
+
+        const mInput = document.getElementById("modalInputPath");
+        const mScript = document.getElementById("modalScriptPath");
+        if (mInput && p) mInput.value = p;
+        if (mScript && s) mScript.value = s;
+
+        const pInput = document.getElementById("pipelineInputPath");
+        const pScript = document.getElementById("pipelineScriptPath");
+        const pChar = document.getElementById("pipelineCharInput");
+        if (pInput && p) pInput.value = p;
+        if (pScript && s) pScript.value = s;
+        if (pChar && c) pChar.value = c;
+      });
+    });
+
     // Cancel Job Button
     const cancelBtn = document.getElementById("cancelJobBtn");
     if (cancelBtn) {
@@ -385,8 +493,34 @@ class VoicesolateApp {
       });
     }
 
-    // Scan Button
+    // Modal Scan Button
+    const modalScanBtn = document.getElementById("modalScanBtn");
+    const modalStatusText = document.getElementById("modalScanStatusText");
+    if (modalScanBtn) {
+      modalScanBtn.addEventListener("click", async () => {
+        const inputPath = document.getElementById("modalInputPath").value.trim();
+        const scriptPath = document.getElementById("modalScriptPath").value.trim();
+        const provider = document.getElementById("modalProviderSelect").value;
+        if (!inputPath) {
+          alert("Please enter a media file path or remote SFTP URL.");
+          return;
+        }
+        if (modalStatusText) modalStatusText.innerText = "⏳ Scanning media stream...";
+        modalScanBtn.disabled = true;
+        try {
+          await api.scanMedia(inputPath, scriptPath || null, provider || null);
+        } catch (err) {
+          if (modalStatusText) modalStatusText.innerText = `❌ Error: ${err.message}`;
+          alert("Scan failed: " + err.message);
+        } finally {
+          modalScanBtn.disabled = false;
+        }
+      });
+    }
+
+    // Scan Button on Pipeline Tab
     const scanBtn = document.getElementById("pipelineScanBtn");
+    const pipeStatusText = document.getElementById("pipelineScanStatusText");
     if (scanBtn) {
       scanBtn.addEventListener("click", async () => {
         const inputPath = document.getElementById("pipelineInputPath").value.trim();
@@ -396,10 +530,15 @@ class VoicesolateApp {
           alert("Please enter a media file path or remote SFTP URL.");
           return;
         }
+        if (pipeStatusText) pipeStatusText.innerText = "⏳ Scanning media stream...";
+        scanBtn.disabled = true;
         try {
           await api.scanMedia(inputPath, scriptPath || null, provider || null);
         } catch (err) {
+          if (pipeStatusText) pipeStatusText.innerText = `❌ Error: ${err.message}`;
           alert("Scan failed: " + err.message);
+        } finally {
+          scanBtn.disabled = false;
         }
       });
     }
