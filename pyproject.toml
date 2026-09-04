@@ -24,6 +24,8 @@ dependencies = [
     "gradio>=4.0.0",
     "f5-tts>=0.1.0",
     "piper-tts>=1.2.0",
+    "TTS>=0.22.0",
+    "transformers<4.47.0",
 ]
 
 [project.scripts]

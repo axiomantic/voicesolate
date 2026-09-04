@@ -38,3 +38,4 @@ cache/stt/
 cache/subtitles/
 output/
 !cache/scripts/
+cache/scripts/*_dialogues.json

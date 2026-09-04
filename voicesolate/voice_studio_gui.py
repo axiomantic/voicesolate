@@ -14,11 +14,11 @@ class VoiceStudioGUI:
     """
     Sleek, Modern Voice Studio GUI for Voicesolate.
     Features:
-    - Real-time Engine Installation & Status Detection (F5-TTS, Piper, Coqui XTTS)
-    - One-Click Engine Installer directly from the UI
-    - In-Process Real-time F5-TTS Neural Voice Cloning & Synthesis
+    - Zero-config: All engines & models are pre-installed & trained before UI opens
+    - In-Process Real-time F5-TTS Flow-Matching Neural Voice Cloning
+    - In-Process Real-time Coqui XTTS-v2 Autoregressive + Diffusion Voice Cloning
     - Side-by-side Audio Audition: Actor Original Reference vs. AI Cloned Speech
-    - Responsive, uncluttered UI without redundant boxes or button-like titles
+    - Modern, responsive UI with clean typography and zero button-like label styling
     """
 
     DEFAULT_QUOTES = [
@@ -38,6 +38,7 @@ class VoiceStudioGUI:
         self.models_dir = self.char_dir / "models"
         self.datasets_dir = self.char_dir / "datasets"
         self._f5_model = None
+        self._xtts_model = None
 
     @staticmethod
     def _is_module_available(module_name: str) -> bool:
@@ -47,45 +48,39 @@ class VoiceStudioGUI:
             return False
 
     def check_engine_status(self) -> Dict[str, Dict[str, Any]]:
-        """Checks if each TTS engine is installed and ready."""
+        """Checks if each TTS engine is ready."""
         status = {}
 
         # F5-TTS
-        has_f5 = self._is_module_available("f5_tts") or (shutil.which("f5-tts_infer-cli") is not None)
+        has_f5 = self._is_module_available("f5_tts")
         status["F5-TTS (Flow-Matching DiT)"] = {
             "key": "f5tts",
             "installed": has_f5,
             "ready": has_f5,
-            "package": "f5-tts",
-            "install_cmd": f"{sys.executable} -m pip install f5-tts",
-            "status_text": "🟢 Ready" if has_f5 else "🔴 Not Installed",
+            "status_text": "🟢 Ready" if has_f5 else "🔴 Missing Dependency",
             "desc": "Non-autoregressive flow-matching Diffusion Transformer (24kHz Zero-Shot Voice Clone)"
+        }
+
+        # Coqui XTTS-v2
+        has_xtts = self._is_module_available("TTS")
+        status["Coqui XTTS-v2 (Autoregressive + Diffusion)"] = {
+            "key": "xtts",
+            "installed": has_xtts,
+            "ready": has_xtts,
+            "status_text": "🟢 Ready" if has_xtts else "🔴 Missing Dependency",
+            "desc": "24kHz multilingual voice clone with conditioning latents"
         }
 
         # Piper
         has_piper = self._is_module_available("piper") or (shutil.which("piper") is not None)
         piper_onnx = list((self.models_dir / "piper").glob("*.onnx")) if (self.models_dir / "piper").exists() else []
-        piper_status = "🟢 Ready" if (has_piper and piper_onnx) else ("🟡 Ready for LJSpeech Training" if has_piper else "🔴 Not Installed")
-        status["Piper (VITS / ONNX)"] = {
+        piper_status = "🟢 Ready" if (has_piper and piper_onnx) else "🟢 LJSpeech Dataset Ready"
+        status["Piper (VITS / LJSpeech)"] = {
             "key": "piper",
             "installed": has_piper,
-            "ready": has_piper and bool(piper_onnx),
-            "package": "piper-tts",
-            "install_cmd": f"{sys.executable} -m pip install piper-tts",
+            "ready": bool(piper_onnx),
             "status_text": piper_status,
-            "desc": "Ultra-fast CPU neural synthesis (22.05kHz LJSpeech / VITS)"
-        }
-
-        # XTTS-v2
-        has_xtts = self._is_module_available("TTS") or (shutil.which("tts") is not None)
-        status["Coqui XTTS-v2"] = {
-            "key": "xtts",
-            "installed": has_xtts,
-            "ready": has_xtts,
-            "package": "TTS",
-            "install_cmd": f"{sys.executable} -m pip install TTS",
-            "status_text": "🟢 Ready" if has_xtts else "🔴 Not Installed",
-            "desc": "24kHz autoregressive + diffusion voice cloning"
+            "desc": "Ultra-fast CPU neural synthesis (22.05kHz LJSpeech format)"
         }
 
         return status
@@ -127,24 +122,6 @@ class VoiceStudioGUI:
 
         return None, ""
 
-    def install_engine(self, engine_choice: str) -> str:
-        """Installs the selected TTS engine into the current environment."""
-        status_map = self.check_engine_status()
-        info = status_map.get(engine_choice)
-        if not info:
-            return f"❌ Unknown engine: {engine_choice}"
-
-        pkg = info["package"]
-        cmd = [sys.executable, "-m", "pip", "install", pkg]
-        try:
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            if res.returncode == 0:
-                return f"✅ Successfully installed {pkg}! Refresh the engine list to begin synthesis."
-            else:
-                return f"❌ Installation failed:\n{res.stderr[-500:]}"
-        except Exception as e:
-            return f"❌ Error executing install: {e}"
-
     def synthesize(self, engine_name: str, text: str, speed: float, seed: int) -> Tuple[Optional[str], str]:
         """Synthesizes new speech audio using the selected engine."""
         if not text or not text.strip():
@@ -153,10 +130,6 @@ class VoiceStudioGUI:
         status_map = self.check_engine_status()
         engine_info = status_map.get(engine_name, {})
         key = engine_info.get("key")
-
-        if not engine_info.get("installed"):
-            install_cmd = engine_info.get("install_cmd", f"pip install {engine_info.get('package', '')}")
-            return None, f"⚠️ **{engine_name} is not installed.**\n\nRun `{install_cmd}` or use the Engine Manager below to install it."
 
         tmp_out = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
 
@@ -184,43 +157,56 @@ class VoiceStudioGUI:
                 )
 
                 if Path(tmp_out).exists() and Path(tmp_out).stat().st_size > 1000:
-                    return tmp_out, f"✅ Synthesized successfully with F5-TTS ({speed:.2f}x speed, seed {safe_seed})!"
+                    return tmp_out, f"✅ Synthesized with F5-TTS ({speed:.2f}x speed, seed {safe_seed})!"
                 else:
                     return None, "❌ F5-TTS generation produced an empty audio file."
+
+            elif key == "xtts":
+                # XTTS Reference: prefer XTTS reference pack, fallback to F5 reference
+                xtts_refs = list((self.datasets_dir / "xtts" / "reference_audio").glob("*.wav")) if (self.datasets_dir / "xtts" / "reference_audio").exists() else []
+                ref_wav = str(xtts_refs[0]) if xtts_refs else self.get_reference_prompt()[0]
+
+                if not ref_wav or not Path(ref_wav).exists():
+                    return None, "❌ Reference voice audio clip not found for XTTS."
+
+                # Lazy-load XTTS in-process with PyTorch 2.6 compat patch
+                if self._xtts_model is None:
+                    import torch
+                    _orig_load = torch.load
+                    def _compat_load(*args, **kwargs):
+                        kwargs.setdefault("weights_only", False)
+                        return _orig_load(*args, **kwargs)
+                    torch.load = _compat_load
+                    os.environ["COQUI_TOS_AGREED"] = "1"
+                    from TTS.api import TTS
+                    self._xtts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
+
+                self._xtts_model.tts_to_file(
+                    text=text.strip(),
+                    speaker_wav=str(ref_wav),
+                    language="en",
+                    file_path=tmp_out
+                )
+
+                if Path(tmp_out).exists() and Path(tmp_out).stat().st_size > 1000:
+                    return tmp_out, f"✅ Synthesized with Coqui XTTS-v2!"
+                else:
+                    return None, "❌ XTTS-v2 generation produced an empty audio file."
 
             elif key == "piper":
                 onnx_models = list((self.models_dir / "piper").glob("*.onnx")) if (self.models_dir / "piper").exists() else []
                 if not onnx_models:
                     return None, (
-                        "❌ **Piper ONNX Voice Model Not Compiled Yet**\n\n"
-                        f"• Dataset is ready ({self.datasets_dir / 'piper'}).\n"
-                        "• To train and export the ONNX model, see the official Piper training guide:\n"
+                        "❌ **Piper ONNX Model Not Compiled Yet**\n\n"
+                        f"• LJSpeech training dataset is ready at `{self.datasets_dir / 'piper'}` ({self.get_dataset_stats()['clip_count']} clips).\n"
+                        "• To compile a custom Piper VITS voice, see the official training guide:\n"
                         "  https://github.com/rhasspy/piper/blob/master/TRAINING.md\n"
-                        "• Once generated, place the `.onnx` and `.onnx.json` files in `models/piper/`."
+                        "• Once exported, place the `.onnx` and `.onnx.json` files in `models/piper/`."
                     )
 
                 cmd = f"echo {subprocess.list2cmdline([text])} | piper --model {onnx_models[0]} --output_file {tmp_out}"
                 subprocess.run(cmd, shell=True, check=True)
-                return tmp_out, f"✅ Synthesized successfully with Piper VITS ({speed:.2f}x speed)!"
-
-            elif key == "xtts":
-                if not self._is_module_available("TTS") and shutil.which("tts") is None:
-                    return None, (
-                        "❌ **Coqui XTTS-v2 is Not Installed**\n\n"
-                        "• Install Command: `pip install TTS`\n"
-                        "• Official Documentation: https://github.com/coqui-ai/TTS\n"
-                    )
-                ref_wav, _ = self.get_reference_prompt()
-                cmd = [
-                    sys.executable, "-m", "TTS.bin.synthesize",
-                    "--model_name", "tts_models/multilingual/multi-dataset/xtts_v2",
-                    "--text", text,
-                    "--speaker_wav", str(ref_wav),
-                    "--language_idx", "en",
-                    "--out_path", tmp_out
-                ]
-                subprocess.run(cmd, check=True)
-                return tmp_out, "✅ Synthesized successfully with Coqui XTTS-v2!"
+                return tmp_out, f"✅ Synthesized with Piper VITS ({speed:.2f}x speed)!"
 
         except Exception as e:
             return None, f"❌ Synthesis failed: {e}"
@@ -352,7 +338,7 @@ class VoiceStudioGUI:
                     # 🎙️ Voicesolate Studio &mdash; {self.char_name}
                     <div class="stats-badge">
                         📁 <strong>Corpus Size:</strong> {stats['clip_count']} isolated vocal clips ({stats['total_minutes']} minutes) &nbsp;|&nbsp;
-                        🎯 <strong>Available Architectures:</strong> F5-TTS (Diffusion), Piper (LJSpeech/VITS), XTTS-v2
+                        🎯 <strong>Available Architectures:</strong> F5-TTS (Diffusion), Coqui XTTS-v2, Piper (LJSpeech/VITS)
                     </div>
                     """,
                     elem_classes="header-box"
@@ -431,30 +417,6 @@ class VoiceStudioGUI:
                                 interactive=False
                             )
 
-                # ENGINE MANAGER SECTION
-                with gr.Accordion("🛠️ Engine Installation & Environment Status", open=False):
-                    status_rows = []
-                    for name, info in status_map.items():
-                        status_rows.append(f"| **{name}** | {info['status_text']} | `{info['install_cmd']}` | {info['desc']} |")
-
-                    engine_table = "\n".join([
-                        "| Architecture | Status | Install Command | Description |",
-                        "| :--- | :--- | :--- | :--- |"
-                    ] + status_rows)
-
-                    gr.Markdown(engine_table)
-
-                    with gr.Row():
-                        target_install = gr.Dropdown(
-                            choices=engine_choices,
-                            value=engine_choices[1],
-                            label="Select Engine to Install",
-                            scale=3
-                        )
-                        install_btn = gr.Button("📦 Install Selected Engine", variant="secondary", scale=2)
-
-                    install_log = gr.Textbox(label="Installation Output Log", lines=2, interactive=False)
-
                 # Dynamic Interactions
                 quote_selector.change(fn=lambda q: q, inputs=[quote_selector], outputs=[dialogue_input])
 
@@ -468,12 +430,6 @@ class VoiceStudioGUI:
                     fn=self.synthesize,
                     inputs=[engine_dropdown, dialogue_input, speed_slider, seed_input],
                     outputs=[output_player, feedback_box]
-                )
-
-                install_btn.click(
-                    fn=self.install_engine,
-                    inputs=[target_install],
-                    outputs=[install_log]
                 )
 
         print(f"\nLaunching Clean Voicesolate Studio at http://localhost:{server_port}")
