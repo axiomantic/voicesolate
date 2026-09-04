@@ -9,6 +9,19 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import soundfile as sf
 import torch
+import warnings
+
+# Suppress harmless upstream deprecation notices from PyTorch and Hugging Face transformers
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", message=".*torch.jit.script.*")
+warnings.filterwarnings("ignore", message=".*GenerationMixin.*")
+warnings.filterwarnings("ignore", message=".*attention mask.*")
+
+try:
+    from transformers import logging as tf_logging
+    tf_logging.set_verbosity_error()
+except Exception:
+    pass
 
 class EngineService:
     """
