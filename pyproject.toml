@@ -21,6 +21,7 @@ dependencies = [
     "soundfile>=0.12.1",
     "torch>=2.2.0",
     "torchaudio>=2.2.0",
+    "gradio>=4.0.0",
 ]
 
 [project.scripts]
