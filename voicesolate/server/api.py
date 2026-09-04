@@ -161,22 +161,36 @@ def install_engine(req: InstallEngineRequest, background_tasks: BackgroundTasks)
     def _do_install(job_id: str, engine_id: str):
         try:
             job_manager.update_job(job_id, progress=20.0, stage="installing", message=f"Configuring {engine_id} engine...")
-            pkg_map = {
-                "piper": "piper-tts",
-                "piper-tts": "piper-tts",
-                "piper-train": "git+https://github.com/rhasspy/piper.git#subdirectory=src/python",
-                "piper_train": "git+https://github.com/rhasspy/piper.git#subdirectory=src/python",
-                "xtts": "TTS",
-                "xtts-v2": "TTS",
-                "f5-tts": "f5-tts",
-                "f5tts": "f5-tts"
-            }
-            pkg = pkg_map.get(engine_id.lower(), engine_id)
-            job_manager.update_job(job_id, progress=40.0, stage="installing", message=f"Running pip install for {engine_id}...")
-            proc = subprocess.run([sys.executable, "-m", "pip", "install", pkg], capture_output=True, text=True, timeout=300)
-            if proc.returncode != 0:
-                logger.error(f"pip install failed: {proc.stderr}")
-                raise RuntimeError(proc.stderr[-300:] or "pip install failed")
+            clean_id = engine_id.lower().replace("_", "-")
+
+            if clean_id in ["piper-train"]:
+                job_manager.update_job(job_id, progress=30.0, stage="installing", message="Installing cross-platform phonemizer (piper-phonemize-cross)...")
+                subprocess.run([sys.executable, "-m", "pip", "install", "piper-phonemize-cross"], capture_output=True, text=True, timeout=300)
+
+                job_manager.update_job(job_id, progress=60.0, stage="installing", message="Installing piper-train...")
+                proc = subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps", "git+https://github.com/rhasspy/piper.git#subdirectory=src/python"], capture_output=True, text=True, timeout=300)
+                if proc.returncode != 0:
+                    logger.error(f"pip install piper-train failed: {proc.stderr}")
+                    raise RuntimeError(proc.stderr[-300:] or "pip install piper-train failed")
+            elif clean_id in ["piper", "piper-tts"]:
+                job_manager.update_job(job_id, progress=40.0, stage="installing", message="Installing piper-tts...")
+                proc = subprocess.run([sys.executable, "-m", "pip", "install", "piper-tts"], capture_output=True, text=True, timeout=300)
+                if proc.returncode != 0:
+                    raise RuntimeError(proc.stderr[-300:] or "pip install piper-tts failed")
+            else:
+                pkg_map = {
+                    "xtts": "TTS",
+                    "xtts-v2": "TTS",
+                    "f5-tts": "f5-tts",
+                    "f5tts": "f5-tts"
+                }
+                pkg = pkg_map.get(clean_id, engine_id)
+                job_manager.update_job(job_id, progress=40.0, stage="installing", message=f"Running pip install for {engine_id}...")
+                proc = subprocess.run([sys.executable, "-m", "pip", "install", pkg], capture_output=True, text=True, timeout=300)
+                if proc.returncode != 0:
+                    logger.error(f"pip install failed: {proc.stderr}")
+                    raise RuntimeError(proc.stderr[-300:] or "pip install failed")
+
             import importlib
             importlib.invalidate_caches()
             job_manager.update_job(job_id, progress=100.0, stage="complete", status="completed", message=f"{engine_id} installed successfully.")
@@ -676,13 +690,18 @@ def train_model(req: TrainModelRequest, background_tasks: BackgroundTasks):
                         if clips:
                             DatasetBuilder(cdir).build_piper_ljspeech(clips)
 
-                has_piper_train = (shutil.which("piper_train") is not None) or (shutil.which("piper-train") is not None)
-                if not has_piper_train:
-                    try:
-                        import piper_train
-                        has_piper_train = True
-                    except ImportError:
-                        pass
+                venv_bin = Path(sys.executable).parent
+                has_piper_train = (
+                    (shutil.which("piper_train") is not None)
+                    or (shutil.which("piper-train") is not None)
+                    or (venv_bin / "piper-train").exists()
+                    or (venv_bin / "piper_train").exists()
+                )
+                try:
+                    import piper_train
+                    has_piper_train = True
+                except ImportError:
+                    pass
 
                 if not has_piper_train:
                     job_manager.update_job(
