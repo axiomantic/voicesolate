@@ -1215,7 +1215,8 @@ class VoicesolateWizardApp {
 
           if (q.stream_url && refAudio) {
             refAudio.src = q.stream_url;
-            refAudio.play().catch(() => {});
+            refAudio.pause();
+            refAudio.currentTime = 0;
           }
           if (refClipId) refClipId.innerText = q.clip_id ? `Stem: ${q.clip_id}` : "";
           if (refTranscript) refTranscript.innerText = `"${q.text}"`;
