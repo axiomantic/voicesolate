@@ -235,17 +235,113 @@ class VoiceStudioGUI:
         ref_wav, ref_txt = self.get_reference_prompt()
         stats = self.get_dataset_stats()
 
-        # Modern, clean CSS without card borders around titles
+        # Clean, modern CSS completely removing button-like styling from labels
         custom_css = """
-        .container { max-width: 1150px; margin: 0 auto; }
-        .header-box { margin-bottom: 1.25rem; }
-        .stats-badge { font-size: 0.95rem; color: #64748b; font-weight: 500; }
-        .status-chip { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.82rem; font-weight: 600; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 1rem 0; }
+        .header-box { margin-bottom: 1.5rem; border-bottom: 1px solid #334155; padding-bottom: 1rem; }
+        .stats-badge { font-size: 0.95rem; color: #94a3b8; font-weight: 500; margin-top: 0.5rem; }
+        
+        /* Strip ALL button/pill background styling from component labels across themes */
+        label,
+        .block label,
+        span[data-testid="block-label"],
+        .label-wrap,
+        .block-title,
+        .svelte-1gfkn6j {
+            background: none !important;
+            background-color: transparent !important;
+            color: #f1f5f9 !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            padding: 0 !important;
+            margin-bottom: 0.4rem !important;
+            font-size: 0.88rem !important;
+            font-weight: 600 !important;
+            display: block !important;
+            letter-spacing: 0.015em !important;
+            text-transform: none !important;
+        }
+
+        /* Strip purple background from label spans */
+        label > span,
+        .block label > span,
+        span[data-testid="block-label"] > span,
+        span[data-testid="block-label"] span {
+            background: transparent !important;
+            background-color: transparent !important;
+            color: #f1f5f9 !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+        }
+
+        /* Input info helper text */
+        .block .info, [data-testid="block-info"] {
+            color: #94a3b8 !important;
+            font-size: 0.8rem !important;
+            margin-bottom: 0.5rem !important;
+        }
+
+        /* Unified panel groups */
+        .panel-card {
+            background: #1e293b !important;
+            border: 1px solid #334155 !important;
+            border-radius: 12px !important;
+            padding: 1.25rem !important;
+        }
+
+        /* Prompt reference callout */
+        .ref-prompt-box {
+            background: #0f172a;
+            border-left: 3px solid #6366f1;
+            padding: 0.75rem 1rem;
+            border-radius: 0 8px 8px 0;
+            margin: 0.75rem 0;
+            color: #cbd5e1;
+            font-size: 0.875rem;
+            font-style: italic;
+        }
+
+        /* Primary action button: distinct, unambiguous call-to-action */
+        #synth-btn {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+            color: #ffffff !important;
+            font-size: 1.05rem !important;
+            font-weight: 600 !important;
+            border-radius: 8px !important;
+            border: none !important;
+            padding: 0.75rem 1.5rem !important;
+            margin-top: 0.75rem !important;
+            cursor: pointer !important;
+            transition: all 0.2s ease !important;
+        }
+        #synth-btn:hover {
+            background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35) !important;
+            transform: translateY(-1px);
+        }
         """
 
-        theme = gr.themes.Soft(
+        theme = gr.themes.Default(
             primary_hue="indigo",
             neutral_hue="slate"
+        ).set(
+            block_label_background_fill="transparent",
+            block_label_background_fill_dark="transparent",
+            block_label_border_width="0px",
+            block_label_border_width_dark="0px",
+            block_label_padding="0px",
+            block_label_radius="0px",
+            block_label_shadow="none",
+            block_label_text_color="#1e293b",
+            block_label_text_color_dark="#f1f5f9",
+            block_label_text_weight="600",
+            block_title_text_color="#1e293b",
+            block_title_text_color_dark="#f1f5f9",
+            block_title_text_weight="600",
         )
 
         with gr.Blocks(title=f"Voicesolate Studio — {self.char_name}", css=custom_css, theme=theme) as demo:
@@ -264,70 +360,76 @@ class VoiceStudioGUI:
 
                 # Main 2-Column Workspace
                 with gr.Row():
-                    # LEFT: Synthesis Controls
+                    # LEFT: Synthesis Controls Group
                     with gr.Column(scale=5):
-                        engine_dropdown = gr.Dropdown(
-                            choices=engine_choices,
-                            value=engine_choices[0],
-                            label="Speech Synthesis Engine",
-                            info="Select the voice clone model architecture"
-                        )
-
-                        engine_status_banner = gr.Markdown(
-                            f"**Status:** {status_map[engine_choices[0]]['status_text']} &mdash; *{status_map[engine_choices[0]]['desc']}*"
-                        )
-
-                        quote_selector = gr.Dropdown(
-                            choices=self.DEFAULT_QUOTES,
-                            value=self.DEFAULT_QUOTES[0],
-                            label="Sample Dialogue Quotes",
-                            info="Quick-select a classic aphorism or enter custom text below"
-                        )
-
-                        dialogue_input = gr.Textbox(
-                            lines=3,
-                            value=self.DEFAULT_QUOTES[0],
-                            label="Dialogue Text",
-                            placeholder="Type any sentence for the voice model to speak..."
-                        )
-
-                        with gr.Accordion("Advanced Voice Settings", open=False):
-                            speed_slider = gr.Slider(
-                                minimum=0.6,
-                                maximum=1.8,
-                                value=1.0,
-                                step=0.05,
-                                label="Speech Rate (Speed)",
-                                info="Adjust pacing without altering pitch"
-                            )
-                            seed_input = gr.Number(
-                                value=42,
-                                label="Generation Seed",
-                                precision=0,
-                                info="Fixed seed guarantees reproducible synthesis"
+                        with gr.Group(elem_classes="panel-card"):
+                            gr.Markdown("### ⚙️ Voice Generation")
+                            
+                            engine_dropdown = gr.Dropdown(
+                                choices=engine_choices,
+                                value=engine_choices[0],
+                                label="Speech Synthesis Engine",
+                                info="Select voice cloning model architecture"
                             )
 
-                        synth_btn = gr.Button("✨ Synthesize Voice", variant="primary", size="lg")
-                        feedback_box = gr.Markdown("")
+                            engine_status_banner = gr.Markdown(
+                                f"**Status:** {status_map[engine_choices[0]]['status_text']} &mdash; *{status_map[engine_choices[0]]['desc']}*"
+                            )
 
-                    # RIGHT: Audition & Side-by-Side Comparison
+                            quote_selector = gr.Dropdown(
+                                choices=self.DEFAULT_QUOTES,
+                                value=self.DEFAULT_QUOTES[0],
+                                label="Sample Dialogue Quotes",
+                                info="Quick-select a classic aphorism or enter custom text below"
+                            )
+
+                            dialogue_input = gr.Textbox(
+                                lines=3,
+                                value=self.DEFAULT_QUOTES[0],
+                                label="Dialogue Text",
+                                placeholder="Type any sentence for the voice model to speak..."
+                            )
+
+                            with gr.Accordion("Advanced Voice Settings", open=False):
+                                speed_slider = gr.Slider(
+                                    minimum=0.6,
+                                    maximum=1.8,
+                                    value=1.0,
+                                    step=0.05,
+                                    label="Speech Rate (Speed)",
+                                    info="Adjust pacing without altering pitch"
+                                )
+                                seed_input = gr.Number(
+                                    value=42,
+                                    label="Generation Seed",
+                                    precision=0,
+                                    info="Fixed seed guarantees reproducible synthesis"
+                                )
+
+                            synth_btn = gr.Button("✨ Synthesize Voice", variant="primary", size="lg", elem_id="synth-btn")
+                            feedback_box = gr.Markdown("")
+
+                    # RIGHT: Audition Group
                     with gr.Column(scale=5):
-                        gr.Markdown("### 🎧 Audio Audition")
+                        with gr.Group(elem_classes="panel-card"):
+                            gr.Markdown("### 🎧 Voice Audition")
 
-                        ref_player = gr.Audio(
-                            value=ref_wav,
-                            label="Actor Reference Voice (Original Neural Stem)",
-                            type="filepath",
-                            interactive=False
-                        )
-                        if ref_txt:
-                            gr.Markdown(f"*Reference Prompt Text:* \"{ref_txt}\"")
+                            ref_player = gr.Audio(
+                                value=ref_wav,
+                                label="Actor Reference Voice (Original Neural Stem)",
+                                type="filepath",
+                                interactive=False
+                            )
+                            if ref_txt:
+                                gr.Markdown(
+                                    f'<div class="ref-prompt-box"><strong>Reference Transcript:</strong> "{ref_txt}"</div>'
+                                )
 
-                        output_player = gr.Audio(
-                            label="AI Voice Synthesis (Generated Audio Output)",
-                            type="filepath",
-                            interactive=False
-                        )
+                            output_player = gr.Audio(
+                                label="AI Voice Synthesis (Generated Audio Output)",
+                                type="filepath",
+                                interactive=False
+                            )
 
                 # ENGINE MANAGER SECTION
                 with gr.Accordion("🛠️ Engine Installation & Environment Status", open=False):
