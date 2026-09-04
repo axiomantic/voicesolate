@@ -27,8 +27,9 @@ class ScriptParser:
     Features persistent disk caching for parsed dialogues and character statistics.
     """
 
-    def __init__(self, cache_dir: str = "cache/scripts"):
+    def __init__(self, cache_dir: str = "cache/scripts", use_cache: bool = True):
         self.cache_dir = cache_dir
+        self.use_cache = use_cache
         os.makedirs(self.cache_dir, exist_ok=True)
         self.dialogues: List[DialogueLine] = []
         self.character_stats: Dict[str, CharacterStats] = {}
@@ -43,6 +44,8 @@ class ScriptParser:
 
     def load_cached_dialogues(self, cache_key: str) -> Optional[List[DialogueLine]]:
         """Loads parsed dialogues from JSON cache if available."""
+        if not self.use_cache:
+            return None
         json_cache = os.path.join(self.cache_dir, f"{cache_key}_dialogues.json")
         if os.path.exists(json_cache):
             try:
@@ -71,9 +74,10 @@ class ScriptParser:
         Accepts local files (.txt, .json, .srt), URLs, or pluggable provider identifiers.
         """
         cache_key = self._get_cache_key(source)
-        cached = self.load_cached_dialogues(cache_key)
-        if cached:
-            return cached, True
+        if self.use_cache:
+            cached = self.load_cached_dialogues(cache_key)
+            if cached:
+                return cached, True
 
         # 1. Local Files
         if os.path.exists(source):

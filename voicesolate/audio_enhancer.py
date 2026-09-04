@@ -6,7 +6,7 @@ import torchaudio
 import soundfile as sf
 import numpy as np
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 class AudioEnhancer:
     """
@@ -18,12 +18,13 @@ class AudioEnhancer:
     3. Full-Spectrum Studio Preservation (48kHz, 24-bit PCM).
     """
 
-    def __init__(self, device: Optional[str] = None):
+    def __init__(self, device: Optional[str] = None, cache_manager: Optional[Any] = None):
         if device:
             self.device = device
         else:
             self.device = "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
         
+        self.cache = cache_manager
         self._demucs_model = None
         self._vocal_idx = None
 
@@ -41,20 +42,39 @@ class AudioEnhancer:
                 print(f"Warning: Failed to load Demucs model: {e}")
         return self._demucs_model
 
-    def clean_and_enhance_file(self, input_wav: str, output_wav: str) -> str:
+    def clean_and_enhance_file(self, input_wav: str, output_wav: str, media_key: Optional[str] = None, timecode_str: Optional[str] = None) -> str:
         """
         Runs high-fidelity neural vocal isolation and natural dynamic mastering.
+        Reuses cached neural vocal stem if available to avoid repeating GPU demucs.
         """
         in_path = Path(input_wav)
         out_path = Path(output_wav)
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
+        cached_stem = None
+        if self.cache and self.cache.use_cache_enhance and media_key and timecode_str:
+            stem_p = self.cache.get_stem_path(media_key, timecode_str)
+            if stem_p.exists():
+                cached_stem = stem_p
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_isolated = os.path.join(tmp_dir, "isolated_vocals.wav")
 
-            # Stage 1: Neural Demucs Isolation with shift averaging
-            success = self.isolate_vocals_neural(str(in_path), tmp_isolated)
-            source_file = tmp_isolated if success else str(in_path)
+            if cached_stem:
+                source_file = str(cached_stem)
+            else:
+                # Stage 1: Neural Demucs Isolation with shift averaging
+                success = self.isolate_vocals_neural(str(in_path), tmp_isolated)
+                source_file = tmp_isolated if success else str(in_path)
+                
+                # Save into cache if available
+                if success and self.cache and media_key and timecode_str:
+                    stem_p = self.cache.get_stem_path(media_key, timecode_str)
+                    try:
+                        import shutil
+                        shutil.copy(tmp_isolated, str(stem_p))
+                    except Exception:
+                        pass
 
             # Stage 2: Natural Dynamic Mastering (Zero gating, transparent peak headroom)
             self.master_vocal_natural(source_file, str(out_path))

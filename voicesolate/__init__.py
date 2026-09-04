@@ -11,6 +11,7 @@ from .cache_manager import CacheManager
 
 from .dataset_builder import DatasetBuilder
 from .model_trainer import ModelTrainer
+from .interactive_tester import InteractiveTester
 
 __version__ = "0.3.0"
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "CacheManager",
     "DatasetBuilder",
     "ModelTrainer",
+    "InteractiveTester",
 ]

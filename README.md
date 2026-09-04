@@ -71,7 +71,13 @@ voicesolate -i "path/to/movie.mkv"
 | `--targets` | TTS targets to prepare & train: `all`, `piper`, `xtts`, `f5` | `all` |
 | `--min-duration` | Discard audio clips shorter than N seconds (pass `0` to keep all) | `5.0` (discards <= 5s) |
 | `--no-train` | Prepare training-ready datasets only (skip tuning) | `False` |
+| `--no-interactive` | Skip interactive voice audition / TUI test at the end | `False` |
 | `--no-enhance` | Skip neural Demucs isolation (export discrete raw slices) | `False` |
+| `--no-cache-stt` | Bypass Whisper STT cache (re-transcribes context windows) | `False` |
+| `--no-cache-align` | Bypass alignment cache (re-runs character sequence matching) | `False` |
+| `--no-cache-audio` | Force re-slicing raw discrete audio from media source | `False` |
+| `--no-cache-enhance`| Force re-running GPU Demucs isolation on slices | `False` |
+| `--no-cache-script` | Bypass cached script JSON and re-fetch / re-parse | `False` |
 | `--wyoming-host` | Optional Wyoming Whisper STT IP | `10.0.2.141` |
 | `--wyoming-port` | Optional Wyoming Whisper STT Port | `10300` |
 

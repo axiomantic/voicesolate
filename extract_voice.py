@@ -35,8 +35,16 @@ def parse_args():
     parser.add_argument("--min-duration", type=float, default=5.0, help="Minimum clip duration in seconds (default: 5.0 to discard short utterances <= 5s, pass 0 to keep all)")
     parser.add_argument("--targets", nargs="+", default=["all"], help="Target model formats to prepare & train: 'all', 'piper', 'xtts', 'f5' (default: all)")
     parser.add_argument("--no-train", action="store_true", help="Prepare datasets only; skip model training / packaging")
+    parser.add_argument("--no-interactive", action="store_true", help="Skip interactive audition / TUI test at the end")
     parser.add_argument("--no-enhance", action="store_true", help="Skip ML vocal isolation and super-resolution enhancement")
     parser.add_argument("--all-characters", action="store_true", help="Select all characters found in script")
+
+    # Granular Cache Bypass Controls (Additive & Re-entrant)
+    parser.add_argument("--no-cache-stt", action="store_true", help="Bypass STT whisper cache for this run (still writes updated cache)")
+    parser.add_argument("--no-cache-align", action="store_true", help="Bypass character alignment cache (still writes updated cache)")
+    parser.add_argument("--no-cache-audio", action="store_true", help="Force re-slicing raw audio even if destination file already exists")
+    parser.add_argument("--no-cache-enhance", action="store_true", help="Force re-running neural Demucs isolation even if enhanced file already exists")
+    parser.add_argument("--no-cache-script", action="store_true", help="Bypass cached script JSON and re-fetch/re-parse script")
     return parser.parse_args()
 
 def main():
@@ -82,8 +90,17 @@ def main():
     media_duration = extractor.get_duration()
     console.print(f"[blue]Media duration:[/blue] {media_duration:.2f}s ({media_duration/60:.1f} minutes)")
 
+    # Initialize Cache Manager with granular bypass flags
+    cache_mgr = CacheManager(
+        use_cache_stt=not args.no_cache_stt,
+        use_cache_align=not args.no_cache_align,
+        use_cache_audio=not args.no_cache_audio,
+        use_cache_enhance=not args.no_cache_enhance,
+        use_cache_script=not args.no_cache_script
+    )
+
     # Fetch & Parse Script
-    parser = ScriptParser()
+    parser = ScriptParser(use_cache=not args.no_cache_script)
     script_source = args.script
     provider = args.provider
 
@@ -148,8 +165,9 @@ def main():
             subtitles_cache = None
 
     # Hierarchical STT Alignment & Slicing
-    aligner = SearchAligner(extractor, stt_client)
-    enhancer = AudioEnhancer()
+    aligner = SearchAligner(extractor, stt_client, cache_manager=cache_mgr)
+    enhancer = AudioEnhancer(cache_manager=cache_mgr)
+    media_key = cache_mgr.get_media_key(extractor.raw_path)
 
     manifest = {
         "episode": episode_name,
@@ -194,12 +212,19 @@ def main():
             clip_path = raw_dir / f"{clip.timecode_str}.wav"
             enhanced_path = enhanced_dir / f"{clip.timecode_str}_enhanced.wav"
 
-            # 1. Slice audio
-            extractor.export_clip(clip.start_sec, clip.end_sec, str(clip_path))
+            # 1. Slice audio (Idempotent: reuse existing slice unless --no-cache-audio is set)
+            if not clip_path.exists() or args.no_cache_audio:
+                extractor.export_clip(clip.start_sec, clip.end_sec, str(clip_path))
 
-            # 2. ML Cleanup & Super-Resolution Enhancement
+            # 2. ML Cleanup & Super-Resolution Enhancement (Idempotent: reuse existing unless --no-cache-enhance is set)
             if not args.no_enhance:
-                enhancer.clean_and_enhance_file(str(clip_path), str(enhanced_path))
+                if not enhanced_path.exists() or args.no_cache_enhance:
+                    enhancer.clean_and_enhance_file(
+                        str(clip_path),
+                        str(enhanced_path),
+                        media_key=media_key,
+                        timecode_str=clip.timecode_str
+                    )
 
             clip_entry = {
                 "character": clip.character,
@@ -256,6 +281,15 @@ def main():
                 trained_models = trainer.train_all(datasets, targets=args.targets)
                 for model_type, model_path in trained_models.items():
                     console.print(f"[bold green]✓ {model_type.upper()} model package created:[/bold green] {model_path}")
+
+                # Interactive Audition / TUI Test Loop
+                if not args.no_interactive:
+                    try:
+                        from .interactive_tester import InteractiveTester
+                        tester = InteractiveTester(char_dir)
+                        tester.run_tui()
+                    except Exception as e:
+                        console.print(f"[yellow]Interactive audition skipped or interrupted: {e}[/yellow]")
 
 if __name__ == "__main__":
     main()
