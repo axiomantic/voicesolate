@@ -43,7 +43,7 @@ def run_scan_job(job_id: str, input_path: str, script_path: Optional[str] = None
         embedded_srt = output_base_dir / "embedded_subs.srt"
         found_subs = False
         if not embedded_srt.exists() or embedded_srt.stat().st_size == 0:
-            found_subs = extractor.extract_subtitles_to_file(str(embedded_srt))
+            found_subs = extractor.extract_embedded_subtitles(str(embedded_srt))
         else:
             found_subs = True
 
@@ -141,7 +141,7 @@ def run_pipeline_job(job_id: str, params: Dict[str, Any]):
 
         embedded_srt = output_base_dir / "embedded_subs.srt"
         if not embedded_srt.exists() or embedded_srt.stat().st_size == 0:
-            extractor.extract_subtitles_to_file(str(embedded_srt))
+            extractor.extract_embedded_subtitles(str(embedded_srt))
         active_subs = str(embedded_srt) if embedded_srt.exists() else None
 
         job_manager.update_job(job_id, progress=15.0, stage="script", message="Parsing script lines...")

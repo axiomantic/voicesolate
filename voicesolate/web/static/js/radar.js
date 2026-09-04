@@ -17,8 +17,6 @@ export class WaveformRadar {
     this.workers = {};
     this.activeClip = null;
     this.hoverClip = null;
-    this.playheadRatio = 0.0;
-    this.isPlaying = false;
 
     this.initCanvas();
     this.bindEvents();
@@ -64,11 +62,6 @@ export class WaveformRadar {
     }
   }
 
-  setPlayhead(ratio) {
-    this.playheadRatio = Math.max(0, Math.min(1, ratio));
-    this.draw();
-  }
-
   formatTime(seconds) {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
@@ -84,10 +77,14 @@ export class WaveformRadar {
       const ratio = x / this.width;
       const hoverSec = ratio * this.duration;
 
+      if (this.options.onHoverTime) {
+        this.options.onHoverTime(hoverSec);
+      }
+
       const found = this.clips.find(c => hoverSec >= c.start_sec && hoverSec <= c.end_sec);
       if (found !== this.hoverClip) {
         this.hoverClip = found;
-        this.canvas.style.cursor = found ? "pointer" : "crosshair";
+        this.canvas.style.cursor = found ? "pointer" : "default";
         this.draw();
       }
     });
@@ -104,16 +101,9 @@ export class WaveformRadar {
       const clickSec = ratio * this.duration;
 
       const found = this.clips.find(c => clickSec >= c.start_sec && clickSec <= c.end_sec);
-      if (found) {
-        this.activeClip = found;
-        if (this.options.onClipSelect) {
-          this.options.onClipSelect(found);
-        }
-      } else {
-        this.playheadRatio = ratio;
-        if (this.options.onSeek) {
-          this.options.onSeek(clickSec, ratio);
-        }
+      this.activeClip = found || null;
+      if (this.options.onClipSelect) {
+        this.options.onClipSelect(this.activeClip);
       }
       this.draw();
     });
@@ -255,26 +245,7 @@ export class WaveformRadar {
       ctx.fill();
     });
 
-    // 5. Draw Playhead
-    if (this.playheadRatio > 0 && this.playheadRatio <= 1) {
-      const px = this.playheadRatio * w;
-      ctx.strokeStyle = "#f43f5e";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(px, 0);
-      ctx.lineTo(px, h);
-      ctx.stroke();
-
-      ctx.fillStyle = "#f43f5e";
-      ctx.beginPath();
-      ctx.moveTo(px - 5, 0);
-      ctx.lineTo(px + 5, 0);
-      ctx.lineTo(px, 7);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // 6. Draw Hover Tooltip
+    // 5. Draw Hover Tooltip
     if (this.hoverClip) {
       const hClip = this.hoverClip;
       const tipText = `[${hClip.character}] ${hClip.confidence}% — "${hClip.text.slice(0, 35)}..."`;

@@ -607,7 +607,7 @@ class VoicesolateWizardApp {
   setupRadar() {
     this.radar = new WaveformRadar("macroWaveformCanvas", {
       onClipSelect: (clip) => this.handleClipSelected(clip),
-      onSeek: (sec) => {
+      onHoverTime: (sec) => {
         const timeEl = document.getElementById("radarCursorTime");
         if (timeEl) timeEl.innerText = this.formatTime(sec);
       }
@@ -618,6 +618,10 @@ class VoicesolateWizardApp {
     this.selectedClip = clip;
     const inspector = document.getElementById("clipInspectorContainer");
     if (!inspector) return;
+    if (!clip) {
+      inspector.style.display = "none";
+      return;
+    }
 
     document.getElementById("inspectorClipTitle").innerText = `${clip.character || this.selectedCharacter} • ${this.formatTime(clip.start_sec)} ➔ ${this.formatTime(clip.end_sec)}`;
     document.getElementById("inspectorConfidence").innerText = `${Math.round((clip.confidence || 0.95) * 100)}% Match`;

@@ -128,6 +128,10 @@ class AudioExtractor:
             return False
         return False
 
+    def extract_subtitles_to_file(self, output_srt_path: str) -> bool:
+        """Alias for extract_embedded_subtitles."""
+        return self.extract_embedded_subtitles(output_srt_path)
+
     def extract_slice_pcm(self, start_sec: float, duration_sec: float, sample_rate: int = 16000) -> bytes:
         """Fast partial chunk extraction (16kHz mono) for Wyoming STT probing."""
         target = self.remote_file_path if self.is_remote else str(self.local_path)
