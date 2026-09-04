@@ -57,26 +57,41 @@ class InteractiveTester:
         # 2. XTTS / Chatterbox
         xtts_cfg = self.models_dir / "xtts" / "speaker_profile.json"
         if xtts_cfg.exists():
-            available["xtts"] = {
-                "name": "Coqui XTTS-v2 / Chatterbox",
-                "type": "xtts",
-                "config": xtts_cfg,
-                "speed": 1.0,
-                "temperature": 0.75,
-                "description": "24kHz autoregressive + diffusion voice clone"
-            }
+            try:
+                import json
+                with open(xtts_cfg) as f:
+                    xtts_data = json.load(f)
+                available["xtts"] = {
+                    "name": "Coqui XTTS-v2 / Chatterbox",
+                    "type": "xtts",
+                    "config": xtts_cfg,
+                    "reference_audio": xtts_data.get("reference_audio", []),
+                    "speed": 1.0,
+                    "temperature": 0.75,
+                    "description": "24kHz autoregressive + diffusion voice clone"
+                }
+            except Exception:
+                pass
 
         # 3. F5-TTS
         f5_cfg = self.models_dir / "f5tts" / "f5_profile.json"
         if f5_cfg.exists():
-            available["f5tts"] = {
-                "name": "F5-TTS (Flow-Matching DiT)",
-                "type": "f5tts",
-                "config": f5_cfg,
-                "speed": 1.0,
-                "nfe_step": 32,
-                "description": "State-of-the-art non-autoregressive diffusion transformer"
-            }
+            try:
+                import json
+                with open(f5_cfg) as f:
+                    f5_data = json.load(f)
+                available["f5tts"] = {
+                    "name": "F5-TTS (Flow-Matching DiT)",
+                    "type": "f5tts",
+                    "config": f5_cfg,
+                    "ref_audio": f5_data.get("ref_audio"),
+                    "ref_text": f5_data.get("ref_text", ""),
+                    "speed": 1.0,
+                    "nfe_step": 32,
+                    "description": "State-of-the-art non-autoregressive diffusion transformer"
+                }
+            except Exception:
+                pass
 
         return available
 
@@ -169,6 +184,7 @@ class InteractiveTester:
             action = questionary.select(
                 f"Action for {meta['name']}:",
                 choices=[
+                    "🎧 Play Curated Reference Audio",
                     "▶ Synthesize & Play",
                     "⚙ Tweak Engine Parameters",
                     "📝 Change Test Text",
@@ -176,7 +192,23 @@ class InteractiveTester:
                 ]
             ).ask()
 
-            if action == "▶ Synthesize & Play":
+            if action == "🎧 Play Curated Reference Audio":
+                # Play curated reference prompt for this model
+                if selected_key == "f5tts" and meta.get("ref_audio"):
+                    console.print(f"[green]Playing F5-TTS reference prompt: {meta['ref_audio']}[/green]")
+                    self.play_audio(Path(meta["ref_audio"]))
+                elif selected_key == "xtts" and meta.get("reference_audio"):
+                    ref = Path(meta["reference_audio"][0])
+                    console.print(f"[green]Playing XTTS reference prompt: {ref}[/green]")
+                    self.play_audio(ref)
+                elif selected_key == "piper":
+                    # Play first clip in piper dataset
+                    piper_wavs = list((self.datasets_dir / "piper" / "wavs").glob("*.wav"))
+                    if piper_wavs:
+                        console.print(f"[green]Playing Piper training clip: {piper_wavs[0]}[/green]")
+                        self.play_audio(piper_wavs[0])
+
+            elif action == "▶ Synthesize & Play":
                 with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_out:
                     out_p = Path(tmp_out.name)
                 success = self.synthesize(selected_key, meta, test_text, out_p)
