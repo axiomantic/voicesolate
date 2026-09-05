@@ -106,6 +106,8 @@ class TrainModelRequest(BaseModel):
     character_name: str
     episode_name: Optional[str] = None
     engine: str
+    epochs: Optional[int] = None
+    dialect: Optional[str] = None
 
 class ClearStepRequest(BaseModel):
     step: int
@@ -831,8 +833,13 @@ def train_model(req: TrainModelRequest, background_tasks: BackgroundTasks):
 
                 job_manager.update_job(job_id, progress=35.0, stage="train", message="Configuring Kokoro-82M style embeddings and character profile...")
                 k_ds = (cdir / "datasets" / "kokoro") if (cdir / "datasets" / "kokoro").exists() else (cdir / "datasets" / "f5tts")
-                res = trainer.train_kokoro(k_ds, progress_callback=_kokoro_progress)
-                complete_msg = f"✓ Kokoro-82M Mark Twain voice clone profile ready for {cdir.name}!"
+                res = trainer.train_kokoro(
+                    k_ds,
+                    epochs=req.epochs or 15,
+                    dialect=req.dialect,
+                    progress_callback=_kokoro_progress
+                )
+                complete_msg = f"✓ Kokoro-82M Mark Twain deep model ready for {cdir.name}!"
             else:
                 raise ValueError(f"Unknown engine: {eng}")
 

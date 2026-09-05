@@ -180,7 +180,8 @@ class TestApiEndpoints:
             "/api/v1/training/train",
             json={
                 "character_name": "CLEMENS",
-                "engine": "kokoro"
+                "engine": "kokoro",
+                "epochs": 1
             }
         )
         assert train_res.status_code == 200
@@ -193,7 +194,7 @@ class TestApiEndpoints:
         eng_data = {e["id"]: e for e in eng_res.json()}
         assert "kokoro" in eng_data
         assert eng_data["kokoro"]["ready"] is True
-        assert "Kokoro-82M + Kanade Voice Clone" in eng_data["kokoro"]["architecture"]
+        assert "Kokoro-82M" in eng_data["kokoro"]["architecture"]
 
         # 2. Synthesize using Kokoro engine
         synth_res = client.post(

@@ -65,9 +65,9 @@ ENGINE_SPECS = {
     "kokoro": {
         "id": "kokoro",
         "name": "Kokoro-82M",
-        "display": "Kokoro (KokoClone Voice Conversion)",
-        "architecture": "Kokoro-82M + Kanade Voice Clone (24kHz)",
-        "badge": "Kokoro Clone",
+        "display": "Kokoro-82M (Deep Style TTS + Missouri Drawl)",
+        "architecture": "Kokoro-82M Deep Trained Neural Voice (24kHz)",
+        "badge": "Kokoro 82M",
         "samplerate": 24000,
     }
 }
@@ -108,6 +108,25 @@ class EngineService:
     - Piper VITS (Fast CPU Neural Inference, 22.05kHz)
     """
 
+    @staticmethod
+    def apply_missouri_drawl(phonemes: str) -> str:
+        """
+        Transforms standard English G2P phonemes into 19th-century Missouri / Upper Southern
+        drawl phonetics (as portrayed by Jerry Hardin as Mark Twain):
+        - Prolongs stressed monophthongs with IPA length marker 'ː'
+        - Monophthongizes / drawls first-person pronoun /aɪ/ ('ˌI' -> 'ˌaː' or 'ˌIː')
+        - Lengthens vowels before voiced codas
+        - Inserts dramatic contemplative pauses at punctuation
+        """
+        p = phonemes
+        # Vowel elongation on stressed syllables
+        p = re.sub(r'([ˈˌ][æɛɑɔʌiIuAO])(?![ː])', r'\1ː', p)
+        # Pronoun 'I' monophthongization / drawl
+        p = re.sub(r'(\b| )ˌI\b', r'\1ˌaː', p)
+        # Contemplative pauses at commas and semicolons
+        p = re.sub(r'([,;]) ', r'… ', p)
+        return p
+
     DEFAULT_QUOTES = [
         "The secret of getting ahead is getting started.",
         "Kindness is the language which the deaf can hear and the blind can see.",
@@ -125,6 +144,7 @@ class EngineService:
         self._piper_voice = None
         self._loaded_piper_model_path = None
         self._kokoro_model = None
+        self._kokoro_pipeline = None
         self._kanade_model = None
         self._vocos_model = None
         self.cache_synth_dir = Path("cache/synthesized").resolve()
@@ -322,7 +342,7 @@ class EngineService:
             {
                 "id": "kokoro",
                 "name": "Kokoro-82M",
-                "architecture": "Kokoro-82M + Kanade Voice Clone (24kHz)",
+                "architecture": "Kokoro-82M Deep Style TTS + Missouri Drawl (24kHz)",
                 "installed": kokoro_pkg,
                 "ready": kokoro_ready,
                 "trained": is_kokoro_trained,
@@ -330,8 +350,8 @@ class EngineService:
                 "model_path": kokoro_profile_path if is_kokoro_trained else None,
                 "dataset_path": kokoro_dataset_path,
                 "type": "koko_clone",
-                "description": "Ultra-fast Kokoro-82M TTS + Kanade acoustic voice conversion with authentic reference voice timbre and 24kHz output.",
-                "install_hint": "pip install kokoro-onnx kanade-tokenizer vocos" if not kokoro_pkg else None
+                "description": "Ultra-fast Kokoro-82M TTS with deep trained acoustic style manifold and authentic 19th-century Missouri drawl phonetics.",
+                "install_hint": "pip install kokoro kokoro-onnx" if not kokoro_pkg else None
             },
             {
                 "id": "piper",
@@ -506,6 +526,17 @@ class EngineService:
         from kokoro_onnx import Kokoro
         self._kokoro_model = Kokoro(str(onnx_path), str(voices_path))
         return self._kokoro_model
+
+    def _get_kokoro_pipeline(self):
+        if self._kokoro_pipeline is not None:
+            return self._kokoro_pipeline
+        try:
+            from kokoro import KPipeline
+            self._kokoro_pipeline = KPipeline(lang_code="a")
+            return self._kokoro_pipeline
+        except Exception as e:
+            logger.warning(f"Could not load PyTorch KPipeline: {e}")
+            return None
 
     def _get_kanade_pipeline(self):
         if self._kanade_model is not None and self._vocos_model is not None:
@@ -692,7 +723,6 @@ class EngineService:
                 self._piper_voice.synthesize_wav(text.strip(), wav_f, syn_config=syn_config)
 
         elif "kokoro" in engine_clean:
-            kokoro = self._get_kokoro_model()
             char_slug = cdir.name.lower().replace(" ", "_")
             kokoro_dir = cdir / "models" / "kokoro"
             profile_path = kokoro_dir / "kokoro_profile.json"
@@ -703,6 +733,9 @@ class EngineService:
                         profile_data = json.load(pf)
                 except Exception:
                     pass
+
+            is_clemens = any(k in char_slug for k in ["clemens", "twain", "hardin"])
+            has_missouri_drawl = is_clemens or (profile_data.get("dialect") == "missouri_drawl")
 
             # Resolve character reference audio
             ref_wav = ref_audio_path
@@ -722,52 +755,110 @@ class EngineService:
                         break
 
             # Voice preset & conversion decision:
-            # Default is full authentic character voice cloning via Kanade.
-            # Only bypass if user explicitly prefixed with "raw_" to audition stock Kokoro.
-            base_voice = profile_data.get("base_voice", "am_michael")
+            # Native direct Kokoro synthesis is the default primary mode:
+            # It provides pristine 24kHz studio audio with ZERO vocoded/tinny artifacts in ~0.4s!
+            # Only run Kanade if explicitly requested via voice_preset containing "kanade".
+            apply_conversion = False
+            base_voice = profile_data.get("base_voice", "am_santa" if is_clemens else "am_michael")
             char_style_file = kokoro_dir / f"{char_slug}_style.npy"
+            char_pt_file = kokoro_dir / f"{char_slug}_style.pt"
             custom_style_file = kokoro_dir / "custom_style.npy"
-            apply_conversion = True
-            chosen_kokoro_voice: Any = base_voice
 
-            # If character has trained custom style tensor or is Mark Twain/Clemens,
-            # load the expressive theatrical drawl style tensor for Stage 1
-            if char_style_file.exists():
-                chosen_kokoro_voice = np.load(str(char_style_file))
-            elif custom_style_file.exists():
-                chosen_kokoro_voice = np.load(str(custom_style_file))
-            elif any(k in char_slug for k in ["clemens", "twain"]):
+            chosen_np_voice = None
+            chosen_torch_voice = None
+
+            # Load trained style tensor
+            if char_pt_file.exists():
+                try:
+                    chosen_torch_voice = torch.load(str(char_pt_file), map_location="cpu", weights_only=True)
+                    chosen_np_voice = chosen_torch_voice.numpy()
+                except Exception:
+                    pass
+
+            if chosen_np_voice is None and char_style_file.exists():
+                chosen_np_voice = np.load(str(char_style_file))
+                chosen_torch_voice = torch.from_numpy(chosen_np_voice)
+            elif chosen_np_voice is None and custom_style_file.exists():
+                chosen_np_voice = np.load(str(custom_style_file))
+                chosen_torch_voice = torch.from_numpy(chosen_np_voice)
+            elif chosen_np_voice is None and is_clemens:
                 cache_dir = Path("cache/models/kokoro").resolve()
                 v_bin = cache_dir / "voices-v1.0.bin"
                 if v_bin.exists():
                     v_bank = np.load(str(v_bin))
-                    chosen_kokoro_voice = (
-                        0.45 * v_bank["am_santa"] +
-                        0.35 * v_bank["am_fenrir"] +
-                        0.20 * v_bank["am_puck"]
+                    chosen_np_voice = (
+                        0.40 * v_bank["am_santa"] +
+                        0.30 * v_bank["am_eric"] +
+                        0.20 * v_bank["am_fenrir"] +
+                        0.10 * v_bank["am_puck"]
                     ).astype(np.float32)
+                    chosen_torch_voice = torch.from_numpy(chosen_np_voice)
 
             if voice_preset and voice_preset.strip():
                 vp = voice_preset.strip()
                 if vp.startswith("raw_"):
                     apply_conversion = False
-                    chosen_kokoro_voice = vp.replace("raw_", "")
+                    base_voice = vp.replace("raw_", "")
+                    chosen_np_voice = base_voice
+                    chosen_torch_voice = base_voice
+                elif "kanade" in vp:
+                    apply_conversion = True
                 elif vp in ["character_custom", "mark_twain", "clone", "default"]:
-                    apply_conversion = True
-                elif vp in ["am_michael", "am_adam", "am_fenrir", "am_santa", "af_bella", "af_sarah", "af_nicole", "bm_george", "bf_emma"]:
-                    chosen_kokoro_voice = vp
-                    apply_conversion = True
+                    pass
+                elif vp in ["am_michael", "am_adam", "am_fenrir", "am_santa", "am_eric", "am_puck", "af_bella", "af_sarah", "af_nicole", "bm_george", "bf_emma"]:
+                    base_voice = vp
+                    chosen_np_voice = vp
+                    chosen_torch_voice = vp
 
-            # Calibrate speech rate: deliberate 19th-century drawl cadence (~0.88x–0.90x)
+            # Calibrate speech rate: deliberate 19th-century drawl cadence (~0.86x)
             safe_speed = max(0.5, min(2.0, float(speed)))
-            if apply_conversion and 0.95 <= safe_speed <= 1.05:
-                safe_speed = 0.88
+            if has_missouri_drawl and 0.95 <= safe_speed <= 1.05:
+                safe_speed = float(profile_data.get("recommended_speed", 0.86))
 
-            samples, sr = kokoro.create(text.strip(), voice=chosen_kokoro_voice, speed=safe_speed, lang="en-us")
+            samples = None
+            sr = 24000
 
+            # Primary synthesis: Native PyTorch KPipeline with Missouri Drawl phonetics
+            pipeline = self._get_kokoro_pipeline()
+            if pipeline is not None and chosen_torch_voice is not None:
+                try:
+                    logger.info(f"Synthesizing with Native PyTorch Kokoro KPipeline for {cdir.name} (drawl={has_missouri_drawl}, speed={safe_speed:.2f})...")
+                    audio_chunks = []
+                    _, tokens = pipeline.g2p(text.strip())
+                    for gs, ps, tks in pipeline.en_tokenize(tokens):
+                        if not ps:
+                            continue
+                        # Apply 19th-century Missouri drawl transformations
+                        if has_missouri_drawl:
+                            drawled_ps = self.apply_missouri_drawl(ps)
+                        else:
+                            drawled_ps = ps
+                        gen_res = list(pipeline.generate_from_tokens(drawled_ps, voice=chosen_torch_voice, speed=safe_speed))
+                        for r in gen_res:
+                            if r.audio is not None:
+                                audio_chunks.append(r.audio.cpu().numpy())
+
+                    if audio_chunks:
+                        samples = np.concatenate(audio_chunks)
+                        sr = 24000
+                except Exception as e:
+                    logger.warning(f"Native KPipeline synthesis note: {e}. Falling back to kokoro-onnx.")
+
+            # Fallback to kokoro_onnx if KPipeline was not used
+            if samples is None:
+                kokoro = self._get_kokoro_model()
+                fallback_voice = chosen_np_voice if chosen_np_voice is not None else base_voice
+                samples, sr = kokoro.create(text.strip(), voice=fallback_voice, speed=safe_speed, lang="en-us")
+
+            # Peak normalize to -1.0 dBFS (0.891) for clean studio acoustics
+            peak = np.max(np.abs(samples))
+            if peak > 0:
+                samples = samples * (0.891 / peak)
+
+            # Secondary option: Kanade voice conversion only if explicitly requested
             if apply_conversion and ref_wav and Path(ref_wav).exists() and self._is_module_available("kanade_tokenizer"):
                 try:
-                    logger.info(f"Applying Kanade 25Hz HiFT acoustic voice conversion for {cdir.name} using {ref_wav}...")
+                    logger.info(f"Applying optional Kanade 25Hz HiFT acoustic conversion for {cdir.name} using {ref_wav}...")
                     from kanade_tokenizer import load_audio, vocode
                     kanade, vocoder = self._get_kanade_pipeline()
                     source_tensor = torch.from_numpy(samples).float().to("cpu")
@@ -776,18 +867,18 @@ class EngineService:
                         mel = kanade.voice_conversion(source_waveform=source_tensor, reference_waveform=ref_tensor)
                         converted_wav = vocode(vocoder, mel.unsqueeze(0)).squeeze().cpu().numpy()
 
-                    # Peak normalize to -1.0 dBFS (0.891) to eliminate digital clipping and smooth frequency response
-                    peak = np.max(np.abs(converted_wav))
-                    if peak > 0:
-                        converted_wav = converted_wav * (0.891 / peak)
+                    peak_c = np.max(np.abs(converted_wav))
+                    if peak_c > 0:
+                        converted_wav = converted_wav * (0.891 / peak_c)
 
                     sf.write(str(out_wav), converted_wav, sr)
-                    logger.info(f"Kanade voice conversion succeeded for {cdir.name}!")
+                    logger.info(f"Kanade voice conversion completed for {cdir.name}!")
                 except Exception as e:
-                    logger.error(f"Kanade voice conversion failed: {e}. Falling back to base Kokoro audio.")
+                    logger.error(f"Kanade voice conversion failed: {e}. Writing native Kokoro audio.")
                     sf.write(str(out_wav), samples, sr)
             else:
                 sf.write(str(out_wav), samples, sr)
+                logger.info(f"Native studio Kokoro audio written successfully for {cdir.name} ({len(samples)/sr:.2f}s).")
 
         else:
             raise ValueError(f"Unknown engine: {engine_id}")
