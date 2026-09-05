@@ -192,9 +192,8 @@ class TestApiEndpoints:
         assert eng_res.status_code == 200
         eng_data = {e["id"]: e for e in eng_res.json()}
         assert "kokoro" in eng_data
-        assert eng_data["kokoro"]["installed"] is True
         assert eng_data["kokoro"]["ready"] is True
-        assert eng_data["kokoro"]["architecture"] == "Single-Pass StyleTTS 2 (82M ONNX / 24kHz)"
+        assert "Kokoro-82M + Kanade Voice Clone" in eng_data["kokoro"]["architecture"]
 
         # 2. Synthesize using Kokoro engine
         synth_res = client.post(

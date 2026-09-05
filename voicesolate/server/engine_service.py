@@ -59,9 +59,9 @@ ENGINE_SPECS = {
     "kokoro": {
         "id": "kokoro",
         "name": "Kokoro-82M",
-        "display": "Kokoro (StyleTTS 2 / 82M)",
-        "architecture": "Single-Pass StyleTTS 2 (82M ONNX / 24kHz)",
-        "badge": "Kokoro 82M",
+        "display": "Kokoro (KokoClone Voice Conversion)",
+        "architecture": "Kokoro-82M + Kanade Voice Clone (24kHz)",
+        "badge": "Kokoro Clone",
         "samplerate": 24000,
     }
 }
@@ -119,6 +119,8 @@ class EngineService:
         self._piper_voice = None
         self._loaded_piper_model_path = None
         self._kokoro_model = None
+        self._kanade_model = None
+        self._vocos_model = None
         self.cache_synth_dir = Path("cache/synthesized").resolve()
         self.cache_synth_dir.mkdir(parents=True, exist_ok=True)
 
@@ -143,7 +145,12 @@ class EngineService:
             "python_version": sys.version.split()[0],
             "torch_version": torch.__version__,
             "device": device_str,
-            "acceleration": "Apple Silicon (MPS)" if has_mps else ("NVIDIA CUDA" if has_cuda else "CPU Only"),
+            "hardware": {
+                "device": device_str,
+                "mps_available": has_mps,
+                "cuda_available": has_cuda,
+                "device_name": torch.cuda.get_device_name(0) if has_cuda else ("Apple Silicon MPS" if has_mps else "CPU")
+            },
             "ffmpeg": {
                 "available": ffmpeg_path is not None,
                 "path": ffmpeg_path
@@ -157,6 +164,7 @@ class EngineService:
                 "TTS": self._is_module_available("TTS"),
                 "piper": self._is_module_available("piper"),
                 "kokoro": self._is_module_available("kokoro_onnx") or self._is_module_available("kokoro"),
+                "kanade": self._is_module_available("kanade_tokenizer"),
                 "demucs": self._is_module_available("demucs"),
                 "faster_whisper": self._is_module_available("faster_whisper")
             }
@@ -308,16 +316,16 @@ class EngineService:
             {
                 "id": "kokoro",
                 "name": "Kokoro-82M",
-                "architecture": "Single-Pass StyleTTS 2 (82M ONNX / 24kHz)",
+                "architecture": "Kokoro-82M + Kanade Voice Clone (24kHz)",
                 "installed": kokoro_pkg,
                 "ready": kokoro_ready,
                 "trained": is_kokoro_trained,
                 "dataset_ready": kokoro_dataset_ready,
                 "model_path": kokoro_profile_path if is_kokoro_trained else None,
                 "dataset_path": kokoro_dataset_path,
-                "type": "styletts2_onnx",
-                "description": "Ultra-fast ~1s single-pass StyleTTS 2 with 256-dim style embedding cloning, warm natural prosody, and 24kHz output.",
-                "install_hint": "pip install kokoro-onnx" if not kokoro_pkg else None
+                "type": "koko_clone",
+                "description": "Ultra-fast Kokoro-82M TTS + Kanade acoustic voice conversion with authentic reference voice timbre and 24kHz output.",
+                "install_hint": "pip install kokoro-onnx kanade-tokenizer vocos" if not kokoro_pkg else None
             },
             {
                 "id": "piper",
@@ -493,6 +501,16 @@ class EngineService:
         self._kokoro_model = Kokoro(str(onnx_path), str(voices_path))
         return self._kokoro_model
 
+    def _get_kanade_pipeline(self):
+        if self._kanade_model is not None and self._vocos_model is not None:
+            return self._kanade_model, self._vocos_model
+
+        from kanade_tokenizer import KanadeModel, load_vocoder
+        device = torch.device("cpu")
+        self._kanade_model = KanadeModel.from_pretrained("frothywater/kanade-12.5hz").to(device).eval()
+        self._vocos_model = load_vocoder(self._kanade_model.config.vocoder_name).to(device)
+        return self._kanade_model, self._vocos_model
+
     def synthesize(
         self,
         character_dir: Path,
@@ -664,28 +682,69 @@ class EngineService:
             kokoro = self._get_kokoro_model()
             char_slug = cdir.name.lower().replace(" ", "_")
             kokoro_dir = cdir / "models" / "kokoro"
+            profile_path = kokoro_dir / "kokoro_profile.json"
+            profile_data = {}
+            if profile_path.exists():
+                try:
+                    with open(profile_path, "r", encoding="utf-8") as pf:
+                        profile_data = json.load(pf)
+                except Exception:
+                    pass
 
-            chosen_voice = None
-            if voice_preset and voice_preset.strip() and voice_preset != "character_custom":
-                chosen_voice = voice_preset.strip()
-            else:
-                # Check for trained character style tensor
-                char_style = kokoro_dir / f"{char_slug}_style.npy"
-                custom_style = kokoro_dir / "custom_style.npy"
-                if char_style.exists():
-                    chosen_voice = np.load(str(char_style))
-                elif custom_style.exists():
-                    chosen_voice = np.load(str(custom_style))
-                else:
-                    # Dynamically blend Mark Twain warm resonant narrator preset
-                    v1 = kokoro.get_voice_style("am_santa")
-                    v2 = kokoro.get_voice_style("am_fenrir")
-                    v3 = kokoro.get_voice_style("am_michael")
-                    chosen_voice = (0.55 * v1 + 0.30 * v2 + 0.15 * v3).astype(np.float32)
+            # Resolve character reference audio
+            ref_wav = ref_audio_path
+            if not ref_wav or not Path(ref_wav).exists():
+                ref_candidates = [
+                    profile_data.get("ref_audio"),
+                    kokoro_dir / "ref.wav",
+                    cdir / "datasets" / "kokoro" / "ref_audio" / "ref.wav",
+                    cdir / "datasets" / "f5tts" / "ref_audio" / "ref.wav",
+                ]
+                xtts_refs = list((cdir / "datasets" / "xtts" / "reference_audio").glob("*.wav")) if (cdir / "datasets" / "xtts" / "reference_audio").exists() else []
+                if xtts_refs:
+                    ref_candidates.append(str(xtts_refs[0]))
+                for rc in ref_candidates:
+                    if rc and Path(rc).exists():
+                        ref_wav = str(Path(rc).resolve())
+                        break
+
+            # Voice preset & conversion decision:
+            # Default is full authentic character voice cloning via Kanade.
+            # Only bypass if user explicitly prefixed with "raw_" to audition stock Kokoro.
+            base_voice = profile_data.get("base_voice", "am_michael")
+            apply_conversion = True
+
+            if voice_preset and voice_preset.strip():
+                vp = voice_preset.strip()
+                if vp.startswith("raw_"):
+                    apply_conversion = False
+                    base_voice = vp.replace("raw_", "")
+                elif vp in ["character_custom", "mark_twain", "clone", "default"]:
+                    apply_conversion = True
+                elif vp in ["am_michael", "am_adam", "am_fenrir", "am_santa", "af_bella", "af_sarah", "af_nicole", "bm_george", "bf_emma"]:
+                    base_voice = vp
+                    apply_conversion = True
 
             safe_speed = max(0.5, min(2.0, float(speed)))
-            samples, sr = kokoro.create(text.strip(), voice=chosen_voice, speed=safe_speed, lang="en-us")
-            sf.write(str(out_wav), samples, sr)
+            samples, sr = kokoro.create(text.strip(), voice=base_voice, speed=safe_speed, lang="en-us")
+
+            if apply_conversion and ref_wav and Path(ref_wav).exists() and self._is_module_available("kanade_tokenizer"):
+                try:
+                    logger.info(f"Applying Kanade acoustic voice conversion for {cdir.name} using {ref_wav}...")
+                    from kanade_tokenizer import load_audio, vocode
+                    kanade, vocoder = self._get_kanade_pipeline()
+                    source_tensor = torch.from_numpy(samples).float().to("cpu")
+                    ref_tensor = load_audio(str(ref_wav), sample_rate=kanade.config.sample_rate).to("cpu")
+                    with torch.inference_mode():
+                        mel = kanade.voice_conversion(source_waveform=source_tensor, reference_waveform=ref_tensor)
+                        converted_wav = vocode(vocoder, mel.unsqueeze(0)).squeeze().cpu().numpy()
+                    sf.write(str(out_wav), converted_wav, sr)
+                    logger.info(f"Kanade voice conversion succeeded for {cdir.name}!")
+                except Exception as e:
+                    logger.error(f"Kanade voice conversion failed: {e}. Falling back to base Kokoro audio.")
+                    sf.write(str(out_wav), samples, sr)
+            else:
+                sf.write(str(out_wav), samples, sr)
 
         else:
             raise ValueError(f"Unknown engine: {engine_id}")

@@ -1693,9 +1693,9 @@ class VoicesolateWizardApp {
       return {
         id: "kokoro",
         name: "Kokoro-82M",
-        display: "Kokoro (StyleTTS 2 / 82M)",
-        architecture: "Single-Pass StyleTTS 2 (24kHz)",
-        badge: "Kokoro 82M",
+        display: "Kokoro (KokoClone Voice Conversion)",
+        architecture: "Kokoro-82M + Kanade (24kHz)",
+        badge: "Kokoro Clone",
         icon: "🌸",
         color: "var(--accent-emerald, #34d399)"
       };

@@ -832,7 +832,7 @@ def train_model(req: TrainModelRequest, background_tasks: BackgroundTasks):
                 job_manager.update_job(job_id, progress=35.0, stage="train", message="Configuring Kokoro-82M style embeddings and character profile...")
                 k_ds = (cdir / "datasets" / "kokoro") if (cdir / "datasets" / "kokoro").exists() else (cdir / "datasets" / "f5tts")
                 res = trainer.train_kokoro(k_ds, progress_callback=_kokoro_progress)
-                complete_msg = f"✓ Kokoro-82M StyleTTS 2 voice profile ready for {cdir.name}!"
+                complete_msg = f"✓ Kokoro-82M Mark Twain voice clone profile ready for {cdir.name}!"
             else:
                 raise ValueError(f"Unknown engine: {eng}")
 

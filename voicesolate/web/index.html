@@ -584,23 +584,20 @@
             <div class="form-group" id="groupKokoroOptions">
               <div style="display:flex; justify-content:space-between; align-items:center;">
                 <label class="form-label" for="studioKokoroVoiceSelect" style="margin-bottom:0;">
-                  🌸 Kokoro Voice Style / Timbre Blend:
+                  🌸 Kokoro Voice Architecture &amp; Character Cloning:
                 </label>
-                <span style="font-size:11px; color:var(--accent-emerald, #34d399); font-weight:600;">82M Single-Pass StyleTTS 2</span>
+                <span style="font-size:11px; color:var(--accent-emerald, #34d399); font-weight:600;">Kokoro-82M + Kanade Voice Clone</span>
               </div>
               <div style="font-size:11px; color:var(--text-dim); margin:3px 0 6px 0;">
-                Select custom trained character style vector or audition warm storyteller / classic persona presets.
+                One-click Mark Twain voice clone with Kanade acoustic timbre re-voicing, or audition raw stock voices.
               </div>
               <select id="studioKokoroVoiceSelect" class="form-select">
-                <option value="character_custom">✨ Character Custom Style (Trained / Blended Style Profile)</option>
-                <option value="am_santa">am_santa (Elder Storyteller — Deep, Warm, Resonant Male)</option>
-                <option value="am_fenrir">am_fenrir (Deep Authoritative Resonance — Gravitas Male)</option>
-                <option value="am_michael">am_michael (Warm Natural Narrator — Conversational Male)</option>
-                <option value="am_adam">am_adam (Classic American Male — Clear &amp; Articulate)</option>
-                <option value="af_bella">af_bella (Warm Expressive Female — Natural Cadence)</option>
-                <option value="af_sarah">af_sarah (Dynamic American Female — Narrative Read)</option>
-                <option value="bm_george">bm_george (British Gentleman — Distinguished Tone)</option>
-                <option value="bf_emma">bf_emma (British Female — Crisp Theatrical)</option>
+                <option value="character_custom" selected>✨ Character Voice Clone (Kokoro + Kanade Timbre Re-voicing)</option>
+                <option value="raw_am_michael">am_michael (Stock Kokoro — Warm Natural Narrator)</option>
+                <option value="raw_am_adam">am_adam (Stock Kokoro — Clear American Male)</option>
+                <option value="raw_am_santa">am_santa (Stock Kokoro — Deep Resonant Storyteller)</option>
+                <option value="raw_af_sarah">af_sarah (Stock Kokoro — Dynamic Female)</option>
+                <option value="raw_bm_george">bm_george (Stock Kokoro — British Gentleman)</option>
               </select>
             </div>
 
@@ -613,7 +610,7 @@
                     <input type="checkbox" id="checkEngineKokoro" value="kokoro" checked>
                     <div>
                       <strong style="color:#fff; font-size:13px;">Kokoro-82M</strong>
-                      <div style="font-size:11px; color:var(--text-dim);">StyleTTS 2 (24kHz)</div>
+                      <div style="font-size:11px; color:var(--text-dim);">KokoClone (24kHz)</div>
                     </div>
                   </label>
                   <div class="engine-card-action" id="actionKokoro" style="margin-top:6px;"></div>

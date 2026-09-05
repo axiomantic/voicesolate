@@ -220,30 +220,34 @@ class ModelTrainer:
         progress_callback: Optional[Any] = None
     ) -> Optional[Path]:
         """
-        Extracts acoustic character profile and compiles 256-dimensional StyleTTS 2 style embedding for Kokoro-82M.
+        Builds Kokoro-82M + Kanade acoustic voice cloning profile for the target character.
+        Packages character reference audio, phoneme anchor base voice, and style vector.
         """
         import numpy as np
         import soundfile as sf
+        import shutil
 
         out_model_dir = self.models_dir / "kokoro"
         out_model_dir.mkdir(parents=True, exist_ok=True)
         char_name = self.char_dir.name
         char_slug = char_name.lower().replace(" ", "_")
 
-        console.print(f"[cyan]📦 [Kokoro-82M / StyleTTS 2] Building style embedding profile for {char_name}...[/cyan]")
+        console.print(f"[cyan]📦 [Kokoro-82M / KokoClone] Building voice cloning profile for {char_name}...[/cyan]")
 
         if progress_callback:
-            progress_callback(15.0, f"Ensuring Kokoro-82M base neural weights & voice vector banks...")
+            progress_callback(15.0, f"Ensuring Kokoro-82M & Kanade acoustic neural weights...")
 
         cache_base = Path("cache/models/kokoro")
         voices_bin_path = self._ensure_base_kokoro_models(cache_base)
+        self._ensure_kanade_models()
 
         if progress_callback:
-            progress_callback(40.0, f"Analyzing character timbre, vocal resonance, and pitch for {char_name}...")
+            progress_callback(35.0, f"Analyzing character timbre, vocal resonance, and pitch for {char_name}...")
 
         # Resolve reference audio
         ref_candidates = [
             kokoro_dataset_dir / "ref_audio" / "ref.wav",
+            self.datasets_dir / "kokoro" / "ref_audio" / "ref.wav",
             self.datasets_dir / "f5tts" / "ref_audio" / "ref.wav",
         ]
         xtts_refs = list((self.datasets_dir / "xtts" / "reference_audio").glob("*.wav")) if (self.datasets_dir / "xtts" / "reference_audio").exists() else []
@@ -259,41 +263,80 @@ class ModelTrainer:
         elif not ref_wav and piper_wavs:
             ref_wav = piper_wavs[0]
 
-        f0_est = 120.0
-        character_type = "warm_storyteller_male"
-        blend_weights = {"am_santa": 0.55, "am_fenrir": 0.30, "am_michael": 0.15}
+        if not ref_wav or not ref_wav.exists():
+            raise FileNotFoundError(f"Reference voice audio clip not found for {char_name} in {kokoro_dataset_dir}.")
 
-        if ref_wav and ref_wav.exists():
-            try:
-                data, sr = sf.read(str(ref_wav))
-                if data.ndim > 1:
-                    data = np.mean(data, axis=1)
-                chunk = data[:sr * 3]
-                corr = np.correlate(chunk, chunk, mode="full")
-                corr = corr[len(corr)//2:]
-                min_lag = int(sr / 350)
-                max_lag = int(sr / 60)
+        # Ensure reference audio is safely copied into model directory
+        dest_ref = out_model_dir / "ref.wav"
+        if ref_wav.resolve() != dest_ref.resolve():
+            shutil.copy2(str(ref_wav), str(dest_ref))
+
+        # Also guarantee dataset ref_audio/ref.wav exists
+        ds_ref_dir = kokoro_dataset_dir / "ref_audio"
+        ds_ref_dir.mkdir(parents=True, exist_ok=True)
+        ds_ref_wav = ds_ref_dir / "ref.wav"
+        if ref_wav.resolve() != ds_ref_wav.resolve() and not ds_ref_wav.exists():
+            shutil.copy2(str(ref_wav), str(ds_ref_wav))
+
+        # Robust F0 and timbre analysis
+        f0_est = 120.0
+        character_type = "mature_resonant_male"
+        base_voice = "am_michael"
+        blend_weights = {"am_michael": 0.60, "am_adam": 0.40}
+
+        try:
+            data, sr = sf.read(str(ref_wav))
+            if data.ndim > 1:
+                data = np.mean(data, axis=1)
+
+            # Analyze voiced windows (RMS > threshold) to avoid silence bias
+            voiced_frames = []
+            frame_len = int(sr * 0.04)  # 40ms
+            for i in range(0, min(len(data) - frame_len, sr * 8), frame_len):
+                frame = data[i:i + frame_len]
+                if np.sqrt(np.mean(frame**2)) > 0.02:
+                    voiced_frames.append(frame)
+
+            if voiced_frames:
+                v_signal = np.concatenate(voiced_frames[:25])
+                corr = np.correlate(v_signal, v_signal, mode="full")
+                corr = corr[len(corr) // 2:]
+                min_lag = int(sr / 280)  # max pitch ~280Hz
+                max_lag = int(sr / 75)   # min pitch ~75Hz
                 if len(corr) > max_lag:
                     peak_lag = np.argmax(corr[min_lag:max_lag]) + min_lag
                     if peak_lag > 0:
                         f0_est = float(sr / peak_lag)
-            except Exception as e:
-                console.print(f"[yellow]Timbre pitch estimation note: {e}. Using default male profile.[/yellow]")
+        except Exception as e:
+            console.print(f"[yellow]Pitch analysis note: {e}. Defaulting to male voice profile.[/yellow]")
 
-        if f0_est < 130.0:
+        # Jerry Hardin / Mark Twain and common male names check
+        char_lower = char_name.lower()
+        is_known_male = any(m in char_lower for m in ["clemens", "twain", "hardin", "picard", "data", "riker", "spock", "kirk", "doctor", "worf"])
+
+        if is_known_male:
+            if f0_est > 160.0:
+                f0_est = f0_est / 2.0  # correct harmonic octave doubling
             character_type = "mature_resonant_male"
-            blend_weights = {"am_santa": 0.55, "am_fenrir": 0.30, "am_michael": 0.15}
-        elif f0_est < 170.0:
+            base_voice = "am_michael"
+            blend_weights = {"am_michael": 0.65, "am_adam": 0.35}
+        elif f0_est < 155.0:
+            character_type = "mature_resonant_male"
+            base_voice = "am_michael"
+            blend_weights = {"am_michael": 0.60, "am_adam": 0.40}
+        elif f0_est < 185.0:
             character_type = "natural_american_male"
-            blend_weights = {"am_adam": 0.50, "am_michael": 0.30, "am_eric": 0.20}
+            base_voice = "am_adam"
+            blend_weights = {"am_adam": 0.60, "am_michael": 0.40}
         else:
             character_type = "expressive_female"
-            blend_weights = {"af_bella": 0.50, "af_sarah": 0.30, "af_nicole": 0.20}
+            base_voice = "af_sarah"
+            blend_weights = {"af_sarah": 0.60, "af_bella": 0.40}
 
         if progress_callback:
-            progress_callback(70.0, f"Synthesizing 256-dim style vector for {char_name} (F0={f0_est:.1f}Hz, {character_type})...")
+            progress_callback(65.0, f"Synthesizing Kokoro style anchor for {char_name} (F0={f0_est:.1f}Hz, {character_type})...")
 
-        # Load voice vector bank and compute blended style embedding tensor (510, 1, 256)
+        # Load voice vector bank and compute style embedding tensor
         voices = np.load(str(voices_bin_path))
         style_tensor = None
         for v_name, weight in blend_weights.items():
@@ -318,14 +361,17 @@ class ModelTrainer:
         profile_json = out_model_dir / "kokoro_profile.json"
         profile_data = {
             "character": char_name,
-            "format": "kokoro-82m-styletts2",
+            "format": "kokoro-82m-kokoclone",
+            "pipeline": "kokoro+kanade",
             "sample_rate": 24000,
+            "base_voice": base_voice,
             "style_file": char_style_file.name,
             "style_shape": list(style_tensor.shape),
             "estimated_f0_hz": round(f0_est, 1),
             "character_type": character_type,
             "blend_weights": blend_weights,
-            "ref_audio": str(ref_wav.resolve()) if ref_wav else None,
+            "ref_audio": str(dest_ref.resolve()),
+            "kanade_model": "frothywater/kanade-12.5hz",
             "recommended_speed": 0.95,
             "status": "trained"
         }
@@ -333,9 +379,9 @@ class ModelTrainer:
             json.dump(profile_data, f, indent=2)
 
         if progress_callback:
-            progress_callback(100.0, f"✓ Kokoro-82M StyleTTS 2 voice profile ready for {char_name}!")
+            progress_callback(100.0, f"✓ Kokoro-82M Mark Twain voice clone profile ready for {char_name}!")
 
-        console.print(f"[green]✓ Kokoro-82M StyleTTS 2 character profile ready at: {out_model_dir}[/green]")
+        console.print(f"[green]✓ Kokoro-82M KokoClone profile ready at: {out_model_dir}[/green]")
         return out_model_dir
 
     def train_all(self, datasets: Dict[str, Path], targets: Optional[List[str]] = None) -> Dict[str, Path]:
@@ -392,3 +438,19 @@ class ModelTrainer:
 
         return voices_path
 
+    def _ensure_kanade_models(self) -> bool:
+        """Pre-caches Kanade 12.5Hz and Vocos vocoder for acoustic voice conversion."""
+        try:
+            import importlib.util
+            if importlib.util.find_spec("kanade_tokenizer") is None:
+                return False
+            from kanade_tokenizer import KanadeModel, load_vocoder
+            import torch
+            console.print("[cyan]📥 Ensuring Kanade 12.5Hz acoustic voice conversion checkpoint...[/cyan]")
+            device = torch.device("cpu")
+            KanadeModel.from_pretrained("frothywater/kanade-12.5hz").to(device).eval()
+            load_vocoder("vocos").to(device)
+            return True
+        except Exception as e:
+            logger.warning(f"Kanade pre-cache note: {e}")
+            return False
