@@ -2,10 +2,17 @@ import os
 import sys
 import json
 import shutil
+import logging
 import subprocess
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from rich.console import Console
+
+class _SuppressFlashAttnFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "FlashAttention" not in record.getMessage()
+
+logging.getLogger("kanade_tokenizer").addFilter(_SuppressFlashAttnFilter())
 
 console = Console()
 

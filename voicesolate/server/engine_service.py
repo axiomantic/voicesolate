@@ -25,6 +25,12 @@ warnings.filterwarnings("ignore", message=".*torch.jit.script.*")
 warnings.filterwarnings("ignore", message=".*GenerationMixin.*")
 warnings.filterwarnings("ignore", message=".*attention mask.*")
 
+class _SuppressFlashAttnFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "FlashAttention" not in record.getMessage()
+
+logging.getLogger("kanade_tokenizer").addFilter(_SuppressFlashAttnFilter())
+
 try:
     from transformers import logging as tf_logging
     tf_logging.set_verbosity_error()
