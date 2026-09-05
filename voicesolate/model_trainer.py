@@ -319,7 +319,8 @@ class ModelTrainer:
                 f0_est = f0_est / 2.0  # correct harmonic octave doubling
             character_type = "mature_resonant_male"
             base_voice = "am_michael"
-            blend_weights = {"am_michael": 0.65, "am_adam": 0.35}
+            # Expressive Mark Twain blend: elder storyteller cadence + gravitas baritone rasp + theatrical flair
+            blend_weights = {"am_santa": 0.45, "am_fenrir": 0.35, "am_puck": 0.20}
         elif f0_est < 155.0:
             character_type = "mature_resonant_male"
             base_voice = "am_michael"
@@ -332,6 +333,34 @@ class ModelTrainer:
             character_type = "expressive_female"
             base_voice = "af_sarah"
             blend_weights = {"af_sarah": 0.60, "af_bella": 0.40}
+
+        # Build rich composite reference audio if multiple character clips exist
+        f5_wavs = list((self.datasets_dir / "f5tts" / "wavs").glob("*.wav")) if (self.datasets_dir / "f5tts" / "wavs").exists() else []
+        if len(f5_wavs) >= 2:
+            try:
+                clip_candidates = sorted(f5_wavs, key=lambda p: p.stat().st_size, reverse=True)[:3]
+                audio_segments = []
+                target_sr = 24000
+                total_dur = 0.0
+                for cp in clip_candidates:
+                    d, s = sf.read(str(cp))
+                    if d.ndim > 1:
+                        d = np.mean(d, axis=1)
+                    if s != target_sr:
+                        import torchaudio
+                        import torch
+                        t_d = torch.from_numpy(d).unsqueeze(0).float()
+                        t_d = torchaudio.functional.resample(t_d, s, target_sr)
+                        d = t_d.squeeze(0).numpy()
+                    audio_segments.append(d)
+                    total_dur += len(d) / target_sr
+                    if total_dur >= 18.0:
+                        break
+                if audio_segments:
+                    rich_ref = np.concatenate(audio_segments)
+                    sf.write(str(dest_ref), rich_ref, target_sr)
+            except Exception as e:
+                console.print(f"[yellow]Composite reference creation note: {e}[/yellow]")
 
         if progress_callback:
             progress_callback(65.0, f"Synthesizing Kokoro style anchor for {char_name} (F0={f0_est:.1f}Hz, {character_type})...")
@@ -371,8 +400,9 @@ class ModelTrainer:
             "character_type": character_type,
             "blend_weights": blend_weights,
             "ref_audio": str(dest_ref.resolve()),
-            "kanade_model": "frothywater/kanade-12.5hz",
-            "recommended_speed": 0.95,
+            "kanade_model": "frothywater/kanade-25hz-clean",
+            "vocoder": "hift",
+            "recommended_speed": 0.88,
             "status": "trained"
         }
         with open(profile_json, "w", encoding="utf-8") as f:
@@ -439,17 +469,21 @@ class ModelTrainer:
         return voices_path
 
     def _ensure_kanade_models(self) -> bool:
-        """Pre-caches Kanade 12.5Hz and Vocos vocoder for acoustic voice conversion."""
+        """Pre-caches Kanade 25Hz-clean and HiFT neural vocoder for acoustic voice conversion."""
         try:
             import importlib.util
             if importlib.util.find_spec("kanade_tokenizer") is None:
                 return False
             from kanade_tokenizer import KanadeModel, load_vocoder
             import torch
-            console.print("[cyan]📥 Ensuring Kanade 12.5Hz acoustic voice conversion checkpoint...[/cyan]")
+            console.print("[cyan]📥 Ensuring Kanade 25Hz HiFT acoustic voice conversion checkpoint...[/cyan]")
             device = torch.device("cpu")
-            KanadeModel.from_pretrained("frothywater/kanade-12.5hz").to(device).eval()
-            load_vocoder("vocos").to(device)
+            try:
+                m = KanadeModel.from_pretrained("frothywater/kanade-25hz-clean").to(device).eval()
+            except Exception:
+                m = KanadeModel.from_pretrained("frothywater/kanade-12.5hz").to(device).eval()
+            vocoder_name = getattr(m.config, "vocoder_name", "hift")
+            load_vocoder(vocoder_name).to(device)
             return True
         except Exception as e:
             logger.warning(f"Kanade pre-cache note: {e}")

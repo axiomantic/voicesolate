@@ -507,8 +507,15 @@ class EngineService:
 
         from kanade_tokenizer import KanadeModel, load_vocoder
         device = torch.device("cpu")
-        self._kanade_model = KanadeModel.from_pretrained("frothywater/kanade-12.5hz").to(device).eval()
-        self._vocos_model = load_vocoder(self._kanade_model.config.vocoder_name).to(device)
+        # Use 25Hz-clean with CosyVoice2 HiFT neural source-filter vocoder to eliminate tinny/metallic artifacts
+        try:
+            self._kanade_model = KanadeModel.from_pretrained("frothywater/kanade-25hz-clean").to(device).eval()
+        except Exception as e:
+            logger.warning(f"Could not load kanade-25hz-clean ({e}), falling back to 12.5hz.")
+            self._kanade_model = KanadeModel.from_pretrained("frothywater/kanade-12.5hz").to(device).eval()
+
+        vocoder_name = getattr(self._kanade_model.config, "vocoder_name", "hift")
+        self._vocos_model = load_vocoder(vocoder_name).to(device)
         return self._kanade_model, self._vocos_model
 
     def synthesize(
@@ -712,25 +719,49 @@ class EngineService:
             # Default is full authentic character voice cloning via Kanade.
             # Only bypass if user explicitly prefixed with "raw_" to audition stock Kokoro.
             base_voice = profile_data.get("base_voice", "am_michael")
+            char_style_file = kokoro_dir / f"{char_slug}_style.npy"
+            custom_style_file = kokoro_dir / "custom_style.npy"
             apply_conversion = True
+            chosen_kokoro_voice: Any = base_voice
+
+            # If character has trained custom style tensor or is Mark Twain/Clemens,
+            # load the expressive theatrical drawl style tensor for Stage 1
+            if char_style_file.exists():
+                chosen_kokoro_voice = np.load(str(char_style_file))
+            elif custom_style_file.exists():
+                chosen_kokoro_voice = np.load(str(custom_style_file))
+            elif any(k in char_slug for k in ["clemens", "twain"]):
+                cache_dir = Path("cache/models/kokoro").resolve()
+                v_bin = cache_dir / "voices-v1.0.bin"
+                if v_bin.exists():
+                    v_bank = np.load(str(v_bin))
+                    chosen_kokoro_voice = (
+                        0.45 * v_bank["am_santa"] +
+                        0.35 * v_bank["am_fenrir"] +
+                        0.20 * v_bank["am_puck"]
+                    ).astype(np.float32)
 
             if voice_preset and voice_preset.strip():
                 vp = voice_preset.strip()
                 if vp.startswith("raw_"):
                     apply_conversion = False
-                    base_voice = vp.replace("raw_", "")
+                    chosen_kokoro_voice = vp.replace("raw_", "")
                 elif vp in ["character_custom", "mark_twain", "clone", "default"]:
                     apply_conversion = True
                 elif vp in ["am_michael", "am_adam", "am_fenrir", "am_santa", "af_bella", "af_sarah", "af_nicole", "bm_george", "bf_emma"]:
-                    base_voice = vp
+                    chosen_kokoro_voice = vp
                     apply_conversion = True
 
+            # Calibrate speech rate: deliberate 19th-century drawl cadence (~0.88x–0.90x)
             safe_speed = max(0.5, min(2.0, float(speed)))
-            samples, sr = kokoro.create(text.strip(), voice=base_voice, speed=safe_speed, lang="en-us")
+            if apply_conversion and 0.95 <= safe_speed <= 1.05:
+                safe_speed = 0.88
+
+            samples, sr = kokoro.create(text.strip(), voice=chosen_kokoro_voice, speed=safe_speed, lang="en-us")
 
             if apply_conversion and ref_wav and Path(ref_wav).exists() and self._is_module_available("kanade_tokenizer"):
                 try:
-                    logger.info(f"Applying Kanade acoustic voice conversion for {cdir.name} using {ref_wav}...")
+                    logger.info(f"Applying Kanade 25Hz HiFT acoustic voice conversion for {cdir.name} using {ref_wav}...")
                     from kanade_tokenizer import load_audio, vocode
                     kanade, vocoder = self._get_kanade_pipeline()
                     source_tensor = torch.from_numpy(samples).float().to("cpu")
@@ -738,6 +769,12 @@ class EngineService:
                     with torch.inference_mode():
                         mel = kanade.voice_conversion(source_waveform=source_tensor, reference_waveform=ref_tensor)
                         converted_wav = vocode(vocoder, mel.unsqueeze(0)).squeeze().cpu().numpy()
+
+                    # Peak normalize to -1.0 dBFS (0.891) to eliminate digital clipping and smooth frequency response
+                    peak = np.max(np.abs(converted_wav))
+                    if peak > 0:
+                        converted_wav = converted_wav * (0.891 / peak)
+
                     sf.write(str(out_wav), converted_wav, sr)
                     logger.info(f"Kanade voice conversion succeeded for {cdir.name}!")
                 except Exception as e:
