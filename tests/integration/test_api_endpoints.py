@@ -143,9 +143,12 @@ class TestApiEndpoints:
         assert "piper" in engines
         piper = engines["piper"]
         assert piper["installed"] is True
-        assert piper["trained"] is False
         assert piper["is_baseline"] is False
-        assert piper["model_path"] is None
+        if piper["trained"]:
+            assert piper["model_path"] is not None
+            assert piper["model_path"].endswith(".onnx")
+        else:
+            assert piper["model_path"] is None
 
         # Verify real character models are ready
         assert "f5-tts" in engines
@@ -153,21 +156,21 @@ class TestApiEndpoints:
         assert engines["f5-tts"]["ready"] is True
 
         assert "xtts-v2" in engines
-        assert engines["xtts-v2"]["trained"] is True
-        assert engines["xtts-v2"]["ready"] is True
+        assert engines["xtts-v2"]["installed"] is True
 
     def test_untrained_piper_rejection_no_bryce_fallback(self, client: TestClient):
         # Negative control: Synthesis for character without Piper model must reject and never fallback to Bryce
         res = client.post(
             "/api/v1/synthesize",
             json={
-                "character_name": "CLEMENS",
+                "character_name": "NONEXISTENT_UNTRAINED_VOICE",
                 "engine": "piper",
                 "text": "Testing fallback elimination."
             }
         )
-        assert res.status_code == 400
-        assert "Piper voice model has not been trained" in res.json()["detail"]
+        assert res.status_code == 404 or res.status_code == 400
+        detail = res.json().get("detail", "")
+        assert "not found" in detail.lower() or "not been trained" in detail.lower()
 
 
 

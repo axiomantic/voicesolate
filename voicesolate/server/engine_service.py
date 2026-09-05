@@ -562,14 +562,11 @@ class EngineService:
                 )
                 self._loaded_piper_model_path = str(onnx_path)
 
-            # Map speed and persona / accent exaggeration (cfg_strength) to Piper synthesis parameters
+            # Map speed to length_scale; keep noise_scale at calibrated VITS standard (0.667 / 0.8)
+            # to prevent latent variance explosion / phonetic degradation.
             length_scale = 1.0 / max(0.2, float(speed))
-            # noise_scale controls phoneme noise & dynamic intonation/pitch expressiveness (standard Piper default is 0.667)
-            # noise_w_scale controls phoneme duration variability & drawl/rhythm dynamics (standard Piper default is 0.8)
-            # Scale dynamically with CFG so higher exaggeration delivers dramatic inflection and drawl rather than flat monotone speech:
-            cfg_factor = max(0.2, float(cfg_strength) / 3.0)
-            noise_scale = min(1.5, max(0.3, 0.667 * cfg_factor))
-            noise_w_scale = min(1.5, max(0.3, 0.800 * cfg_factor))
+            noise_scale = 0.667
+            noise_w_scale = 0.800
 
             syn_config = piper.config.SynthesisConfig(
                 length_scale=length_scale,

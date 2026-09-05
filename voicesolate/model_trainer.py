@@ -85,6 +85,7 @@ class ModelTrainer:
             "--max_epochs", str(epochs),
             "--checkpoint-epochs", "1",
             "--gradient_clip_val", "1.0",
+            "--learning_rate", "0.00002",
             "--resume_from_single_speaker_checkpoint", str(base_ckpt.resolve())
         ]
         res_train = subprocess.run(cmd_train, capture_output=True, text=True)
@@ -126,9 +127,9 @@ class ModelTrainer:
                 cdata["dataset"] = char_name
                 cdata["character"] = char_name
                 cdata["inference"] = {
-                    "noise_scale": 1.1,
+                    "noise_scale": 0.667,
                     "length_scale": 1.0,
-                    "noise_w": 1.3
+                    "noise_w": 0.8
                 }
                 with open(target_json, "w", encoding="utf-8") as f:
                     json.dump(cdata, f, indent=2)
