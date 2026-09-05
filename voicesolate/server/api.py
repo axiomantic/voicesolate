@@ -81,8 +81,8 @@ class SynthesizeRequest(BaseModel):
     speed: float = 1.0
     seed: int = 42
     ref_audio_path: Optional[str] = None
-    cfg_strength: float = 2.5
-    nfe_step: int = 32
+    cfg_strength: float = 5.0
+    nfe_step: int = 48
 
 class BatchSynthesizeRequest(BaseModel):
     character_name: str
@@ -92,8 +92,8 @@ class BatchSynthesizeRequest(BaseModel):
     speed: float = 1.0
     seed: int = 42
     ref_audio_path: Optional[str] = None
-    cfg_strength: float = 2.5
-    nfe_step: int = 32
+    cfg_strength: float = 5.0
+    nfe_step: int = 48
 
 class DeleteSynthesisRequest(BaseModel):
     file_path: Optional[str] = None
@@ -486,8 +486,8 @@ def get_character_details(character_name: str, episode: Optional[str] = None):
                     "text": sidecar_data.get("text", ""),
                     "speed": sidecar_data.get("speed", 1.0),
                     "seed": sidecar_data.get("seed", 42),
-                    "cfg_strength": sidecar_data.get("cfg_strength", 2.8),
-                    "nfe_step": sidecar_data.get("nfe_step", 32),
+                    "cfg_strength": sidecar_data.get("cfg_strength", 5.0),
+                    "nfe_step": sidecar_data.get("nfe_step", 48),
                     "created_at": sidecar_data.get("created_at", w.stat().st_mtime)
                 })
             except Exception:

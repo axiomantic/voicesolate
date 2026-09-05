@@ -1499,8 +1499,8 @@ class VoicesolateWizardApp {
     const text = document.getElementById("studioDialogueText").value.trim();
     const speed = parseFloat(document.getElementById("studioSpeedRange").value) || 1.0;
     const seed = parseInt(document.getElementById("studioSeedInput").value, 10) || 42;
-    const cfgStrength = parseFloat(document.getElementById("studioCfgRange")?.value) || 2.8;
-    const nfeStep = parseInt(document.getElementById("studioNfeRange")?.value, 10) || 32;
+    const cfgStrength = parseFloat(document.getElementById("studioCfgRange")?.value) || 5.0;
+    const nfeStep = parseInt(document.getElementById("studioNfeRange")?.value, 10) || 48;
     const refAudioPath = document.getElementById("studioRefAudioSelect")?.value || null;
 
     if (!text) {

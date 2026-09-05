@@ -419,8 +419,8 @@ class EngineService:
         speed: float = 1.0,
         seed: int = 42,
         ref_audio_path: Optional[str] = None,
-        cfg_strength: float = 2.5,
-        nfe_step: int = 32
+        cfg_strength: float = 5.0,
+        nfe_step: int = 48
     ) -> Dict[str, Any]:
         """
         Executes in-process synthesis with selected engine.
@@ -562,10 +562,14 @@ class EngineService:
                 )
                 self._loaded_piper_model_path = str(onnx_path)
 
-            # Map speed and persona / accent guidance (cfg_strength) to Piper synthesis parameters
+            # Map speed and persona / accent exaggeration (cfg_strength) to Piper synthesis parameters
             length_scale = 1.0 / max(0.2, float(speed))
-            noise_scale = min(1.2, max(0.2, 0.667 * (float(cfg_strength) / 2.8)))
-            noise_w_scale = min(1.2, max(0.2, 0.8 * (float(cfg_strength) / 2.8)))
+            # noise_scale controls phoneme noise & dynamic intonation/pitch expressiveness (standard Piper default is 0.667)
+            # noise_w_scale controls phoneme duration variability & drawl/rhythm dynamics (standard Piper default is 0.8)
+            # Scale dynamically with CFG so higher exaggeration delivers dramatic inflection and drawl rather than flat monotone speech:
+            cfg_factor = max(0.2, float(cfg_strength) / 3.0)
+            noise_scale = min(1.5, max(0.3, 0.667 * cfg_factor))
+            noise_w_scale = min(1.5, max(0.3, 0.800 * cfg_factor))
 
             syn_config = piper.config.SynthesisConfig(
                 length_scale=length_scale,
@@ -594,8 +598,8 @@ class EngineService:
             "text": text.strip(),
             "speed": float(speed),
             "seed": int(seed) if seed is not None else 42,
-            "cfg_strength": float(cfg_strength) if cfg_strength is not None else 2.8,
-            "nfe_step": int(nfe_step) if nfe_step is not None else 32,
+            "cfg_strength": float(cfg_strength) if cfg_strength is not None else 5.0,
+            "nfe_step": int(nfe_step) if nfe_step is not None else 48,
             "duration": round(info.duration, 2),
             "samplerate": info.samplerate,
             "created_at": time.time(),
@@ -621,8 +625,8 @@ class EngineService:
             "text": text.strip(),
             "speed": float(speed),
             "seed": int(seed) if seed is not None else 42,
-            "cfg_strength": float(cfg_strength) if cfg_strength is not None else 2.8,
-            "nfe_step": int(nfe_step) if nfe_step is not None else 32,
+            "cfg_strength": float(cfg_strength) if cfg_strength is not None else 5.0,
+            "nfe_step": int(nfe_step) if nfe_step is not None else 48,
             "created_at": meta_payload["created_at"]
         }
 

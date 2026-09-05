@@ -557,26 +557,26 @@
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
               <div class="form-group">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                  <label class="form-label" for="studioCfgRange" style="margin-bottom:0;">Accent / Persona Guidance (CFG)</label>
-                  <span id="studioCfgValue" style="font-size:12px; font-family:var(--font-mono); color:var(--accent-cyan); font-weight:600;">2.80</span>
+                  <label class="form-label" for="studioCfgRange" style="margin-bottom:0;">Accent & Persona Exaggeration (CFG)</label>
+                  <span id="studioCfgValue" style="font-size:12px; font-family:var(--font-mono); color:var(--accent-cyan); font-weight:600;">5.00</span>
                 </div>
                 <div style="font-size:11px; color:var(--text-dim); margin:4px 0 6px 0; line-height:1.35;">
-                  <strong>What it does:</strong> Classifier-Free Guidance strength. Controls how strictly the diffusion model clamps onto the character's unique dialect, inflection, and timbre.<br>
-                  <strong>Impact:</strong> <span style="color:var(--accent-cyan);">Higher (3.2–5.0)</span> forces strong accent exaggeration and theatrical cadence. <span style="color:var(--text-muted);">Lower (&lt;2.2)</span> yields smoother, more generic diction. Values &gt; 5.0 can cause raspiness.
+                  <strong>What it does:</strong> Classifier-Free Guidance strength. Clamps strictly onto the character's unique dialect, theatrical drawl, and intonation.<br>
+                  <strong>Impact:</strong> <span style="color:var(--accent-cyan);">Maximum (4.5–6.0)</span> forces intense accent exaggeration, dynamic inflections, and character grit. <span style="color:var(--text-muted);">Lower (&lt;2.5)</span> yields flat generic diction.
                 </div>
-                <input type="range" id="studioCfgRange" min="1.0" max="5.0" step="0.1" value="2.8" style="accent-color:var(--accent-cyan); width:100%;">
+                <input type="range" id="studioCfgRange" min="1.0" max="7.0" step="0.1" value="5.0" style="accent-color:var(--accent-cyan); width:100%;">
               </div>
 
               <div class="form-group">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                  <label class="form-label" for="studioNfeRange" style="margin-bottom:0;">Diffusion Steps (NFE)</label>
-                  <span id="studioNfeValue" style="font-size:12px; font-family:var(--font-mono); color:var(--accent-cyan); font-weight:600;">32</span>
+                  <label class="form-label" for="studioNfeRange" style="margin-bottom:0;">Diffusion Fidelity Steps (NFE)</label>
+                  <span id="studioNfeValue" style="font-size:12px; font-family:var(--font-mono); color:var(--accent-cyan); font-weight:600;">48</span>
                 </div>
                 <div style="font-size:11px; color:var(--text-dim); margin:4px 0 6px 0; line-height:1.35;">
-                  <strong>What it does:</strong> Number of Function Evaluations (ODE solver denoising steps).<br>
-                  <strong>Impact:</strong> <span style="color:var(--accent-cyan);">Higher (32–64)</span> yields crisp phonemes, breath texture, and high-frequency studio clarity. <span style="color:var(--text-muted);">Lower (16–24)</span> generates much faster with softer consonants.
+                  <strong>What it does:</strong> ODE solver denoising steps for flow-matching diffusion.<br>
+                  <strong>Impact:</strong> <span style="color:var(--accent-cyan);">Higher (48–64)</span> captures fine vocal gravel, breath texture, and dialect nuances.
                 </div>
-                <input type="range" id="studioNfeRange" min="16" max="64" step="4" value="32" style="accent-color:var(--accent-cyan); width:100%;">
+                <input type="range" id="studioNfeRange" min="16" max="64" step="4" value="48" style="accent-color:var(--accent-cyan); width:100%;">
               </div>
             </div>
 
