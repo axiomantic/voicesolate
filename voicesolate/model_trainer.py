@@ -297,14 +297,17 @@ class ModelTrainer:
         if ref_wav.resolve() != ds_ref_wav.resolve() and not ds_ref_wav.exists():
             shutil.copy2(str(ref_wav), str(ds_ref_wav))
 
-        # Gather training audio clips
+        # Gather training audio clips across enhanced, kokoro, f5tts, and piper datasets
         all_clips = []
         if enhanced_wavs:
             all_clips.extend(enhanced_wavs)
+        kokoro_wavs = list((self.datasets_dir / "kokoro" / "wavs").glob("*.wav")) if (self.datasets_dir / "kokoro" / "wavs").exists() else []
+        if kokoro_wavs:
+            all_clips.extend(kokoro_wavs)
         f5_wavs = list((self.datasets_dir / "f5tts" / "wavs").glob("*.wav")) if (self.datasets_dir / "f5tts" / "wavs").exists() else []
         if f5_wavs:
             all_clips.extend(f5_wavs)
-        if not all_clips and piper_wavs:
+        if piper_wavs:
             all_clips.extend(piper_wavs)
         if not all_clips and raw_wavs:
             all_clips.extend(raw_wavs)
