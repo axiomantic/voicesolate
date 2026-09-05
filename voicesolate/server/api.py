@@ -717,8 +717,10 @@ def train_model(req: TrainModelRequest, background_tasks: BackgroundTasks):
                     )
                     return
 
-                job_manager.update_job(job_id, progress=40.0, stage="train", message="Configuring Piper VITS & launching training...")
-                res = trainer.train_piper(datasets["piper"])
+                def _piper_progress(pct: float, msg: str):
+                    job_manager.update_job(job_id, progress=pct, stage="train", message=msg)
+
+                res = trainer.train_piper(datasets["piper"], progress_callback=_piper_progress)
                 complete_msg = f"✓ Piper VITS voice model compiled successfully for {cdir.name}!"
             elif "xtts" in eng_norm:
                 if not (cdir / "datasets" / "xtts" / "reference_audio").exists():

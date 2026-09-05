@@ -24,77 +24,136 @@ class ModelTrainer:
         self.models_dir = character_dir / "models"
         self.models_dir.mkdir(parents=True, exist_ok=True)
 
-    def train_piper(self, piper_dataset_dir: Path, seed_voice: str = "en_US-bryce-medium") -> Optional[Path]:
+    def train_piper(
+        self,
+        piper_dataset_dir: Path,
+        epochs: int = 5,
+        batch_size: int = 4,
+        progress_callback: Optional[Any] = None
+    ) -> Optional[Path]:
         """
-        Prepares and fine-tunes a Piper VITS voice model for this character, exporting {character}.onnx and {character}.onnx.json.
+        Executes real fine-tuning of Piper VITS weights on character dataset.
+        Exports optimized {character}.onnx and {character}.onnx.json.
         """
         out_model_dir = self.models_dir / "piper"
         out_model_dir.mkdir(parents=True, exist_ok=True)
 
-        console.print(f"[cyan]📦 [Piper] Preparing dataset & configuration at:[/cyan] {piper_dataset_dir}")
-        
-        # Check if piper_train is installed in environment
-        venv_bin = Path(sys.executable).parent
-        has_piper_train = (
-            (shutil.which("piper_train") is not None)
-            or (shutil.which("piper-train") is not None)
-            or (venv_bin / "piper-train").exists()
-            or (venv_bin / "piper_train").exists()
-        )
-        try:
-            import piper_train
-            has_piper_train = True
-        except ImportError:
-            pass
-
         char_name = self.char_dir.name
         char_slug = char_name.lower().replace(" ", "_")
-        model_file = f"{char_slug}.onnx"
-        config_file_name = f"{char_slug}.onnx.json"
-        target_onnx = out_model_dir / model_file
-        target_json = out_model_dir / config_file_name
+        target_onnx = out_model_dir / f"{char_slug}.onnx"
+        target_json = out_model_dir / f"{char_slug}.onnx.json"
 
-        # Ensure seed weights exist in shared cache (never in the character folder)
-        cache_dir = Path("cache/models/piper_seed")
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        self._ensure_seed_piper_voice(cache_dir, seed_voice)
+        console.print(f"[cyan]📦 [Piper] Fine-tuning character model for {char_name}...[/cyan]")
+        if progress_callback:
+            progress_callback(15.0, f"Preprocessing {char_name} audio clips and phonemes...")
 
-        seed_onnx = cache_dir / f"{seed_voice}.onnx"
-        seed_json = cache_dir / f"{seed_voice}.onnx.json"
+        # 1. Preprocess dataset
+        cmd_prep = [
+            sys.executable, "-m", "piper_train.preprocess",
+            "--language", "en-us",
+            "--input-dir", str(piper_dataset_dir),
+            "--output-dir", str(piper_dataset_dir),
+            "--sample-rate", "22050",
+            "--dataset-format", "ljspeech",
+            "--single-speaker"
+        ]
+        res_prep = subprocess.run(cmd_prep, capture_output=True, text=True)
+        if res_prep.returncode != 0:
+            console.print(f"[red]Preprocess error: {res_prep.stderr}[/red]")
+            raise RuntimeError(f"Piper preprocessing failed: {res_prep.stderr}")
 
-        # Export/adapt into character-specific model
-        if seed_onnx.exists() and not target_onnx.exists():
-            shutil.copyfile(seed_onnx, target_onnx)
+        # 2. Base checkpoint
+        cache_base = Path("cache/models/piper_base")
+        base_ckpt = self._ensure_base_piper_checkpoint(cache_base)
 
-        if seed_json.exists():
+        if progress_callback:
+            progress_callback(35.0, f"Fine-tuning Piper VITS neural weights for {char_name} on GPU/MPS...")
+
+        # 3. Fine-tuning with piper_train
+        logs_dir = piper_dataset_dir / "lightning_logs"
+        if logs_dir.exists():
+            shutil.rmtree(logs_dir)
+
+        cmd_train = [
+            sys.executable, "-m", "piper_train",
+            "--dataset-dir", str(piper_dataset_dir),
+            "--accelerator", "mps",
+            "--devices", "1",
+            "--batch-size", str(batch_size),
+            "--validation-split", "0.0",
+            "--num-test-examples", "0",
+            "--max_epochs", str(epochs),
+            "--checkpoint-epochs", "1",
+            "--gradient_clip_val", "1.0",
+            "--resume_from_single_speaker_checkpoint", str(base_ckpt.resolve())
+        ]
+        res_train = subprocess.run(cmd_train, capture_output=True, text=True)
+        if res_train.returncode != 0:
+            console.print(f"[yellow]MPS training note: {res_train.stderr}. Retrying with CPU accelerator...[/yellow]")
+            cmd_train[cmd_train.index("--accelerator") + 1] = "cpu"
+            res_train = subprocess.run(cmd_train, capture_output=True, text=True)
+            if res_train.returncode != 0:
+                raise RuntimeError(f"Piper fine-tuning failed: {res_train.stderr}")
+
+        # 4. Locate fine-tuned checkpoint
+        saved_ckpts = sorted(logs_dir.glob("**/*.ckpt"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not saved_ckpts:
+            raise RuntimeError(f"Piper training completed but no .ckpt was generated in {logs_dir}")
+
+        best_ckpt = saved_ckpts[0]
+        console.print(f"[cyan]✓ Fine-tuned checkpoint ready: {best_ckpt.name}[/cyan]")
+
+        if progress_callback:
+            progress_callback(80.0, f"Compiling {char_name} fine-tuned weights to ONNX format...")
+
+        # 5. Export to ONNX
+        cmd_export = [
+            sys.executable, "-m", "piper_train.export_onnx",
+            str(best_ckpt.resolve()),
+            str(target_onnx.resolve())
+        ]
+        res_export = subprocess.run(cmd_export, capture_output=True, text=True)
+        if res_export.returncode != 0 or not target_onnx.exists():
+            console.print(f"[red]Export error: {res_export.stderr}[/red]")
+            raise RuntimeError(f"Piper ONNX export failed: {res_export.stderr}")
+
+        # 6. Adapt config with exaggerated intonation/cadence defaults
+        cfg_src = piper_dataset_dir / "config.json"
+        if cfg_src.exists():
             try:
-                with open(seed_json, "r", encoding="utf-8") as bf:
-                    jdata = json.load(bf)
-                jdata["dataset"] = char_name
-                jdata["character"] = char_name
-                with open(target_json, "w", encoding="utf-8") as tf:
-                    json.dump(jdata, tf, indent=2)
-            except Exception as e:
-                console.print(f"[yellow]Notice adapting config: {e}[/yellow]")
-                if not target_json.exists():
-                    shutil.copyfile(seed_json, target_json)
-        elif not target_json.exists() and seed_json.exists():
-            shutil.copyfile(seed_json, target_json)
+                with open(cfg_src, "r", encoding="utf-8") as f:
+                    cdata = json.load(f)
+                cdata["dataset"] = char_name
+                cdata["character"] = char_name
+                cdata["inference"] = {
+                    "noise_scale": 1.1,
+                    "length_scale": 1.0,
+                    "noise_w": 1.3
+                }
+                with open(target_json, "w", encoding="utf-8") as f:
+                    json.dump(cdata, f, indent=2)
+            except Exception:
+                shutil.copyfile(cfg_src, target_json)
 
+        # 7. Write voice.json manifest
         config_file = out_model_dir / "voice.json"
         config_data = {
             "name": char_name,
             "format": "piper-vits",
             "sample_rate": 22050,
-            "model_file": model_file,
-            "config_file": config_file_name,
+            "model_file": target_onnx.name,
+            "config_file": target_json.name,
             "dataset_dir": str(piper_dataset_dir.resolve()),
-            "status": "trained"
+            "status": "trained",
+            "epochs": epochs
         }
         with open(config_file, "w") as f:
             json.dump(config_data, f, indent=2)
 
-        console.print(f"[green]✓ Piper VITS character model profile configured and ready at: {out_model_dir}[/green]")
+        if progress_callback:
+            progress_callback(100.0, f"✓ Piper VITS voice model compiled successfully for {char_name}!")
+
+        console.print(f"[green]✓ Piper VITS character model trained and ready at: {out_model_dir}[/green]")
         return out_model_dir
 
     def train_xtts(self, xtts_dataset_dir: Path) -> Optional[Path]:
@@ -174,28 +233,14 @@ class ModelTrainer:
 
         return results
 
-    def _ensure_seed_piper_voice(self, cache_dir: Path, seed_voice: str = "en_US-bryce-medium"):
-        """Downloads reference architecture weights to shared cache for fine-tuning seed."""
-        import urllib.request
-        try:
-            parts = seed_voice.split("-")
-            if len(parts) >= 3:
-                lang_region = parts[0]
-                speaker = parts[1]
-                quality = parts[2]
-                lang = lang_region.split("_")[0]
-                url_base = f"https://huggingface.co/rhasspy/piper-voices/resolve/main/{lang}/{lang_region}/{speaker}/{quality}/"
-                onnx_name = f"{seed_voice}.onnx"
-                json_name = f"{seed_voice}.onnx.json"
-
-                onnx_path = cache_dir / onnx_name
-                json_path = cache_dir / json_name
-
-                if not onnx_path.exists():
-                    console.print(f"[cyan]📥 Downloading seed Piper ONNX weights ({seed_voice})...[/cyan]")
-                    urllib.request.urlretrieve(url_base + onnx_name, onnx_path)
-                if not json_path.exists():
-                    urllib.request.urlretrieve(url_base + json_name, json_path)
-        except Exception as e:
-            console.print(f"[yellow]Notice: Seed weights download: {e}[/yellow]")
+    def _ensure_base_piper_checkpoint(self, cache_dir: Path) -> Path:
+        """Downloads official Rhasspy English medium base checkpoint to cache for warm-start fine-tuning."""
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        ckpt_path = cache_dir / "epoch=2164-step=1355540.ckpt"
+        if not ckpt_path.exists() or ckpt_path.stat().st_size < 100_000_000:
+            console.print("[cyan]📥 Downloading official Piper VITS base training checkpoint (806MB)...[/cyan]")
+            url = "https://huggingface.co/datasets/rhasspy/piper-checkpoints/resolve/main/en/en_US/lessac/medium/epoch=2164-step=1355540.ckpt"
+            import urllib.request
+            urllib.request.urlretrieve(url, ckpt_path)
+        return ckpt_path
 
