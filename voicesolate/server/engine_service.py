@@ -119,16 +119,12 @@ class EngineService:
         - Inserts dramatic contemplative pauses at punctuation
         """
         p = phonemes
-        # Vowel elongation on stressed syllables
-        p = re.sub(r'([ˈˌ][æɛɑɔʌiIuAO])(?![ː])', r'\1ː', p)
-        # 19th-century Missouri participle reduction: -ing -> -in'
+        # 19th-century Missouri participle reduction: -ing -> -in' (e.g. gettin', startin')
         p = re.sub(r'ɪŋ\b', r'ɪn', p)
-        # Pronoun 'I' monophthongization / drawl
+        # Pronoun 'I' monophthongization / drawl (/aɪ/ -> /aː/)
         p = re.sub(r'(\b| )ˌI\b', r'\1ˌaː', p)
-        # Contemplative theatrical pauses at commas, semicolons, and dashes
-        p = re.sub(r'([,;—\-])\s*', r'… ', p)
-        # Deep dramatic pauses at ellipsis
-        p = re.sub(r'(\.{3}|…)\s*', r'… … ', p)
+        # Natural conversational breathing pause at punctuation
+        p = re.sub(r'([,;—\-])\s*', r', ', p)
         return p
 
     DEFAULT_QUOTES = [
@@ -794,33 +790,29 @@ class EngineService:
                 if v_bin.exists():
                     v_bank = np.load(str(v_bin))
                     chosen_np_voice = (
-                        0.45 * v_bank["am_onyx"] +
-                        0.30 * v_bank["bm_lewis"] +
-                        0.15 * v_bank["bm_george"] +
-                        0.10 * v_bank["am_fenrir"]
+                        0.60 * v_bank["am_fenrir"] +
+                        0.40 * v_bank["bm_george"]
                     ).astype(np.float32)
                     chosen_torch_voice = torch.from_numpy(chosen_np_voice)
 
             if voice_preset and voice_preset.strip():
                 vp = voice_preset.strip()
-                if vp.startswith("raw_"):
+                if vp.startswith("raw_") or vp == "native_kokoro":
                     apply_conversion = False
                     base_voice = vp.replace("raw_", "")
                     chosen_np_voice = base_voice
                     chosen_torch_voice = base_voice
-                elif "kanade" in vp:
+                elif "kanade" in vp or vp in ["character_custom", "mark_twain", "clone", "default"]:
                     apply_conversion = True
-                elif vp in ["character_custom", "mark_twain", "clone", "default"]:
-                    pass
                 elif vp in ["am_onyx", "bm_lewis", "am_michael", "am_adam", "am_fenrir", "am_santa", "am_eric", "am_puck", "af_bella", "af_sarah", "af_nicole", "bm_george", "bf_emma"]:
                     base_voice = vp
                     chosen_np_voice = vp
                     chosen_torch_voice = vp
 
-            # Calibrate speech rate: deliberate 19th-century drawl cadence (~0.78x for Clemens)
+            # Calibrate speech rate: natural 19th-century drawl cadence (~0.92x for Clemens)
             safe_speed = max(0.5, min(2.0, float(speed)))
             if has_missouri_drawl and 0.95 <= safe_speed <= 1.05:
-                safe_speed = float(profile_data.get("recommended_speed", 0.78 if is_clemens else 0.86))
+                safe_speed = float(profile_data.get("recommended_speed", 0.92 if is_clemens else 0.86))
 
             samples = None
             sr = 24000
@@ -879,17 +871,30 @@ class EngineService:
             if peak > 0:
                 samples = samples * (0.891 / peak)
 
-            # Secondary option: Kanade voice conversion only if explicitly requested
+            # Secondary option: Kanade voice conversion
             if apply_conversion and ref_wav and Path(ref_wav).exists() and self._is_module_available("kanade_tokenizer"):
                 try:
-                    logger.info(f"Applying optional Kanade 25Hz HiFT acoustic conversion for {cdir.name} using {ref_wav}...")
+                    logger.info(f"Applying Kanade 25Hz HiFT acoustic conversion for {cdir.name}...")
                     from kanade_tokenizer import load_audio, vocode
                     kanade, vocoder = self._get_kanade_pipeline()
                     source_tensor = torch.from_numpy(samples).float().to("cpu")
-                    ref_tensor = load_audio(str(ref_wav), sample_rate=kanade.config.sample_rate).to("cpu")
-                    with torch.inference_mode():
-                        mel = kanade.voice_conversion(source_waveform=source_tensor, reference_waveform=ref_tensor)
-                        converted_wav = vocode(vocoder, mel.unsqueeze(0)).squeeze().cpu().numpy()
+
+                    master_emb_file = kokoro_dir / f"{char_slug}_kanade_global.pt"
+                    if master_emb_file.exists():
+                        global_emb = torch.load(str(master_emb_file), map_location="cpu", weights_only=True)
+                        source_features = kanade.encode(source_tensor, return_content=True, return_global=False)
+                        with torch.inference_mode():
+                            mel = kanade.decode(
+                                content_embedding=source_features.content_embedding,
+                                global_embedding=global_emb,
+                                target_audio_length=source_tensor.size(0)
+                            )
+                            converted_wav = vocode(vocoder, mel.unsqueeze(0)).squeeze().cpu().numpy()
+                    else:
+                        ref_tensor = load_audio(str(ref_wav), sample_rate=kanade.config.sample_rate).to("cpu")
+                        with torch.inference_mode():
+                            mel = kanade.voice_conversion(source_waveform=source_tensor, reference_waveform=ref_tensor)
+                            converted_wav = vocode(vocoder, mel.unsqueeze(0)).squeeze().cpu().numpy()
 
                     peak_c = np.max(np.abs(converted_wav))
                     if peak_c > 0:

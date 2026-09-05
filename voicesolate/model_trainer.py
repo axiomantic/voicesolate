@@ -365,9 +365,9 @@ class ModelTrainer:
         # Select optimal base blend anchors
         if is_clemens:
             character_type = "elder_theatrical_storyteller"
-            base_voice = "am_onyx"
-            # Clemens Missouri Drawl deep baritone anchor: Onyx (deep resonant bass 83Hz), Lewis (80Hz chest baritone), George (theatrical warmth), Fenrir (gravel/rasp)
-            blend_weights = {"am_onyx": 0.45, "bm_lewis": 0.30, "bm_george": 0.15, "am_fenrir": 0.10}
+            base_voice = "am_fenrir"
+            # Clemens Missouri Baritone: 60% Fenrir (rasp/chest resonance) + 40% George (theatrical elder cadence)
+            blend_weights = {"am_fenrir": 0.60, "bm_george": 0.40}
         elif f0_median < 145.0:
             character_type = "deep_resonant_male"
             base_voice = "am_fenrir"
@@ -647,7 +647,7 @@ class ModelTrainer:
             "ref_audio": str(dest_ref.resolve()),
             "kanade_model": "frothywater/kanade-25hz-clean",
             "vocoder": "hift",
-            "recommended_speed": 0.78 if is_clemens else 0.95,
+            "recommended_speed": 0.92 if is_clemens else 0.95,
             "status": "trained"
         }
         with open(profile_json, "w", encoding="utf-8") as f:
