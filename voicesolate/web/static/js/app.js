@@ -1420,6 +1420,10 @@ class VoicesolateWizardApp {
           chk = document.getElementById("checkEngineXTTS");
           card = document.getElementById("cardCheckXTTS");
           actionEl = document.getElementById("actionXTTS");
+        } else if (eng.id === "kokoro") {
+          chk = document.getElementById("checkEngineKokoro");
+          card = document.getElementById("cardCheckKokoro");
+          actionEl = document.getElementById("actionKokoro");
         } else if (eng.id === "piper") {
           chk = document.getElementById("checkEnginePiper");
           card = document.getElementById("cardCheckPiper");
@@ -1521,6 +1525,7 @@ class VoicesolateWizardApp {
 
     // Determine checked engines
     const checkedEngines = [];
+    if (document.getElementById("checkEngineKokoro")?.checked) checkedEngines.push("kokoro");
     if (document.getElementById("checkEngineF5")?.checked) checkedEngines.push("f5-tts");
     if (document.getElementById("checkEngineXTTS")?.checked) checkedEngines.push("xtts-v2");
     if (document.getElementById("checkEnginePiper")?.checked) checkedEngines.push("piper");
@@ -1537,6 +1542,7 @@ class VoicesolateWizardApp {
     // Prepend new live generating cards so previously generated cards stay visible!
     const grid = document.getElementById("multiPlayerGrid");
     const batchTimestamp = Date.now();
+    const kokoroPreset = document.getElementById("studioKokoroVoiceSelect")?.value || "character_custom";
 
     checkedEngines.slice().reverse().forEach(eng => {
       const info = this.formatEngineDisplay(eng);
@@ -1562,6 +1568,7 @@ class VoicesolateWizardApp {
               <span class="badge" style="font-size:10px; background:rgba(255,255,255,0.06); color:var(--text-dim);">🎛️ CFG: ${cfgStrength.toFixed(2)}</span>
               <span class="badge" style="font-size:10px; background:rgba(255,255,255,0.06); color:var(--text-dim);">🔄 NFE: ${nfeStep} steps</span>
               <span class="badge" style="font-size:10px; background:rgba(255,255,255,0.06); color:var(--text-dim);">🎲 Seed: ${seed}</span>
+              ${eng === "kokoro" ? `<span class="badge" style="font-size:10px; background:rgba(52,211,153,0.12); color:#34d399;">🌸 Style: ${kokoroPreset}</span>` : ''}
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;" id="actions_${cardId}">
@@ -1583,7 +1590,8 @@ class VoicesolateWizardApp {
         seed: seed,
         ref_audio_path: refAudioPath,
         cfg_strength: cfgStrength,
-        nfe_step: nfeStep
+        nfe_step: nfeStep,
+        voice_preset: kokoroPreset
       });
 
       // Update player cards with results
@@ -1680,6 +1688,16 @@ class VoicesolateWizardApp {
         badge: "XTTS-v2",
         icon: "🎙️",
         color: "var(--accent-purple, #a78bfa)"
+      };
+    } else if (eng.includes("kokoro") || eng.includes("styletts")) {
+      return {
+        id: "kokoro",
+        name: "Kokoro-82M",
+        display: "Kokoro (StyleTTS 2 / 82M)",
+        architecture: "Single-Pass StyleTTS 2 (24kHz)",
+        badge: "Kokoro 82M",
+        icon: "🌸",
+        color: "var(--accent-emerald, #34d399)"
       };
     } else if (eng.includes("piper")) {
       return {

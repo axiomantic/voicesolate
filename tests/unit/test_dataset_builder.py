@@ -131,6 +131,39 @@ class TestDatasetBuilder:
         assert info.samplerate == 24000
         assert info.channels == 1
 
+    def test_build_kokoro_dataset_consumes_and_validates_audio(self, temp_dir: Path, make_wav_file):
+        char_dir = temp_dir / "output" / "ep1" / "CLEMENS"
+        enh_dir = char_dir / "enhanced"
+        enh_dir.mkdir(parents=True, exist_ok=True)
+
+        wav1 = make_wav_file(enh_dir / "clip1_enhanced.wav", duration_sec=4.5, sample_rate=16000)
+
+        clips = [
+            {"file": str(wav1), "enhanced_file": str(wav1), "text": "Kokoro test reference."}
+        ]
+
+        builder = DatasetBuilder(char_dir)
+        kokoro_path = builder.build_kokoro_dataset(clips)
+
+        assert kokoro_path.exists()
+        ref_wav = kokoro_path / "ref_audio" / "ref.wav"
+        ref_txt = kokoro_path / "ref_audio" / "ref.txt"
+        assert ref_wav.exists()
+        assert ref_txt.exists()
+        assert ref_txt.read_text(encoding="utf-8").strip() == "Kokoro test reference."
+
+        info = sf.info(str(ref_wav))
+        assert info.samplerate == 24000
+        assert info.channels == 1
+
+        dataset_json = kokoro_path / "dataset.json"
+        assert dataset_json.exists()
+        with open(dataset_json, "r") as f:
+            data = json.load(f)
+        assert data["character"] == "CLEMENS"
+        assert data["target"] == "kokoro"
+        assert data["sample_rate"] == 24000
+
     def test_negative_control_missing_audio_files_handled_gracefully(self, temp_dir: Path):
         """Negative control: clips pointing to nonexistent files should not crash builder."""
         char_dir = temp_dir / "output" / "ep1" / "CLEMENS"

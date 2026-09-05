@@ -54,7 +54,7 @@ def parse_args():
     parser.add_argument("--wyoming-host", default="10.0.2.141", help="Wyoming STT server IP/hostname (default: 10.0.2.141)")
     parser.add_argument("--wyoming-port", type=int, default=10300, help="Wyoming STT server port (default: 10300)")
     parser.add_argument("--min-duration", type=float, default=5.0, help="Minimum clip duration in seconds (default: 5.0 to discard short utterances <= 5s, pass 0 to keep all)")
-    parser.add_argument("--targets", nargs="+", default=["all"], help="Target model formats to prepare & train: 'all', 'piper', 'xtts', 'f5' (default: all)")
+    parser.add_argument("--targets", nargs="+", default=["all"], help="Target model formats to prepare & train: 'all', 'kokoro', 'piper', 'xtts', 'f5' (default: all)")
     parser.add_argument("--no-train", action="store_true", help="Prepare datasets only; skip model training / packaging")
     parser.add_argument("--web", action="store_true", help="Launch Voice Studio Web UI immediately (default when no --input is specified)")
     parser.add_argument("--no-web-ui", "--headless", dest="no_web_ui", action="store_true", help="Batch CLI mode: do not launch Web Studio when processing finishes")
@@ -410,6 +410,12 @@ def main():
                         "[bold green]🟢 Ready to Synthesize[/bold green]",
                         str(char_dir / "models/xtts")
                     )
+                    table.add_row(
+                        "Kokoro-82M",
+                        "StyleTTS 2 Single-Pass (24kHz)",
+                        "[bold green]🟢 Ready to Synthesize[/bold green]",
+                        str(char_dir / "models/kokoro")
+                    )
                     piper_onnx = list((char_dir / "models/piper").glob("*.onnx"))
                     if piper_onnx:
                         table.add_row(
@@ -431,7 +437,7 @@ def main():
                     console.print(Panel.fit(
                         f"[bold green]✓ Full pipeline complete for {char_name}![/bold green]\n"
                         f"• Isolated Clips: [cyan]{len(all_char_clips if not args.no_aggregate else char_clips)}[/cyan]\n"
-                        f"• Ready Zero-Shot Engines: [green]F5-TTS, Coqui XTTS-v2[/green]\n"
+                        f"• Ready Engines: [green]Kokoro-82M, F5-TTS, Coqui XTTS-v2[/green]\n"
                         f"• LJSpeech Dataset for Piper: [cyan]{char_dir / 'datasets/piper'}[/cyan]\n\n"
                         f"To audition or synthesize interactively, launch Voice Studio:\n"
                         f"  [bold cyan].venv/bin/python -m voicesolate.cli -i ... -c '{char_name}'[/bold cyan]",

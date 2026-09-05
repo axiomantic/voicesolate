@@ -286,6 +286,50 @@ class DatasetBuilder:
 
         return f5_dir
 
+    def build_kokoro_dataset(self, clips: List[Dict[str, Any]]) -> Path:
+        """
+        Builds 24kHz reference audio and metadata for Kokoro / StyleTTS 2 voice cloning.
+        Output directory: datasets/kokoro/
+        """
+        kokoro_dir = self.datasets_dir / "kokoro"
+        wavs_dir = kokoro_dir / "wavs"
+        ref_dir = kokoro_dir / "ref_audio"
+        wavs_dir.mkdir(parents=True, exist_ok=True)
+        ref_dir.mkdir(parents=True, exist_ok=True)
+
+        f5_ref = self.datasets_dir / "f5tts" / "ref_audio" / "ref.wav"
+        f5_txt = self.datasets_dir / "f5tts" / "ref_audio" / "ref.txt"
+        if f5_ref.exists():
+            shutil.copy(str(f5_ref), str(ref_dir / "ref.wav"))
+            if f5_txt.exists():
+                shutil.copy(str(f5_txt), str(ref_dir / "ref.txt"))
+        else:
+            best_ref = None
+            best_text = ""
+            for i, clip in enumerate(clips):
+                source_file = self._resolve_clip_file(clip)
+                if source_file and source_file.exists():
+                    dur = sf.info(str(source_file)).duration
+                    if 4.0 <= dur <= 14.0 and not best_ref:
+                        out_target = ref_dir / "ref.wav"
+                        self._resample_audio(source_file, out_target, 24000)
+                        best_ref = out_target
+                        best_text = clip.get("text", "").strip()
+                        with open(ref_dir / "ref.txt", "w", encoding="utf-8") as f:
+                            f.write(best_text + "\n")
+                        break
+
+        manifest = {
+            "character": self.char_name,
+            "sample_rate": 24000,
+            "target": "kokoro",
+            "ref_audio": str((ref_dir / "ref.wav").resolve()) if (ref_dir / "ref.wav").exists() else None
+        }
+        with open(kokoro_dir / "dataset.json", "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2)
+
+        return kokoro_dir
+
     def build_all(self, *args, **kwargs) -> Dict[str, Path]:
         """
         Builds all requested target datasets.
@@ -333,6 +377,9 @@ class DatasetBuilder:
 
         if do_all or "f5" in selected_targets or "f5-tts" in selected_targets or "f5tts" in selected_targets:
             results["f5tts"] = self.build_f5tts_dataset(final_clips)
+
+        if do_all or "kokoro" in selected_targets or "styletts" in selected_targets:
+            results["kokoro"] = self.build_kokoro_dataset(final_clips)
 
         return results
 

@@ -1,5 +1,6 @@
 import re
 import pytest
+from pathlib import Path
 from starlette.testclient import TestClient
 from voicesolate.server.api import app
 
@@ -25,7 +26,7 @@ class TestApiEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
-        assert len(data) >= 3
+        assert len(data) >= 4
 
         required_keys = {"id", "name", "architecture", "installed", "trained", "ready"}
         for eng in data:
@@ -39,6 +40,7 @@ class TestApiEndpoints:
         assert "f5-tts" in engine_ids
         assert "piper" in engine_ids
         assert "xtts-v2" in engine_ids
+        assert "kokoro" in engine_ids
 
     def test_detect_script_endpoint_and_negative_control(self, client: TestClient):
         # 1. Positive case
@@ -171,6 +173,46 @@ class TestApiEndpoints:
         assert res.status_code == 404 or res.status_code == 400
         detail = res.json().get("detail", "")
         assert "not found" in detail.lower() or "not been trained" in detail.lower()
+
+    def test_kokoro_model_training_and_synthesis(self, client: TestClient):
+        # 1. Train / generate Kokoro style profile for CLEMENS
+        train_res = client.post(
+            "/api/v1/training/train",
+            json={
+                "character_name": "CLEMENS",
+                "engine": "kokoro"
+            }
+        )
+        assert train_res.status_code == 200
+        job_id = train_res.json()["job_id"]
+        assert job_id is not None
+
+        # Verify engine status reports Kokoro as ready
+        eng_res = client.get("/api/v1/system/engines?character=CLEMENS")
+        assert eng_res.status_code == 200
+        eng_data = {e["id"]: e for e in eng_res.json()}
+        assert "kokoro" in eng_data
+        assert eng_data["kokoro"]["installed"] is True
+        assert eng_data["kokoro"]["ready"] is True
+        assert eng_data["kokoro"]["architecture"] == "Single-Pass StyleTTS 2 (82M ONNX / 24kHz)"
+
+        # 2. Synthesize using Kokoro engine
+        synth_res = client.post(
+            "/api/v1/synthesize",
+            json={
+                "character_name": "CLEMENS",
+                "engine": "kokoro",
+                "text": "The secret of getting ahead is getting started.",
+                "speed": 0.95,
+                "voice_preset": "character_custom"
+            }
+        )
+        assert synth_res.status_code == 200
+        synth_data = synth_res.json()
+        assert synth_data["engine"] == "kokoro"
+        assert synth_data["samplerate"] == 24000
+        assert synth_data["duration"] > 0.5
+        assert Path(synth_data["file_path"]).exists()
 
 
 

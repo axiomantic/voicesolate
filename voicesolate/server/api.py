@@ -83,6 +83,7 @@ class SynthesizeRequest(BaseModel):
     ref_audio_path: Optional[str] = None
     cfg_strength: float = 5.0
     nfe_step: int = 48
+    voice_preset: Optional[str] = None
 
 class BatchSynthesizeRequest(BaseModel):
     character_name: str
@@ -94,6 +95,7 @@ class BatchSynthesizeRequest(BaseModel):
     ref_audio_path: Optional[str] = None
     cfg_strength: float = 5.0
     nfe_step: int = 48
+    voice_preset: Optional[str] = None
 
 class DeleteSynthesisRequest(BaseModel):
     file_path: Optional[str] = None
@@ -179,6 +181,8 @@ def install_engine(req: InstallEngineRequest, background_tasks: BackgroundTasks)
                     raise RuntimeError(proc.stderr[-300:] or "pip install piper-tts failed")
             else:
                 pkg_map = {
+                    "kokoro": "kokoro-onnx",
+                    "kokoro-onnx": "kokoro-onnx",
                     "xtts": "TTS",
                     "xtts-v2": "TTS",
                     "f5-tts": "f5-tts",
@@ -190,6 +194,9 @@ def install_engine(req: InstallEngineRequest, background_tasks: BackgroundTasks)
                 if proc.returncode != 0:
                     logger.error(f"pip install failed: {proc.stderr}")
                     raise RuntimeError(proc.stderr[-300:] or "pip install failed")
+                if "kokoro" in clean_id:
+                    job_manager.update_job(job_id, progress=80.0, stage="installing", message="Downloading base Kokoro-82M ONNX model...")
+                    engine_service._get_kokoro_model()
 
             import importlib
             importlib.invalidate_caches()
@@ -556,7 +563,8 @@ def synthesize_speech(req: SynthesizeRequest):
             seed=req.seed,
             ref_audio_path=req.ref_audio_path,
             cfg_strength=req.cfg_strength,
-            nfe_step=req.nfe_step
+            nfe_step=req.nfe_step,
+            voice_preset=req.voice_preset
         )
         return res
     except FileNotFoundError as e:
@@ -586,7 +594,8 @@ def synthesize_batch(req: BatchSynthesizeRequest):
                 seed=req.seed,
                 ref_audio_path=req.ref_audio_path,
                 cfg_strength=req.cfg_strength,
-                nfe_step=req.nfe_step
+                nfe_step=req.nfe_step,
+                voice_preset=req.voice_preset
             )
             results[eng] = {"status": "success", **res}
         except Exception as e:
@@ -805,6 +814,25 @@ def train_model(req: TrainModelRequest, background_tasks: BackgroundTasks):
                 job_manager.update_job(job_id, progress=40.0, stage="train", message="Configuring F5-TTS reference prompt pack & DiT profile...")
                 res = trainer.train_f5tts(datasets["f5tts"])
                 complete_msg = f"✓ F5-TTS reference prompt pack configured for {cdir.name}!"
+            elif "kokoro" in eng_norm:
+                if not (cdir / "datasets" / "kokoro" / "ref_audio" / "ref.wav").exists() and not (cdir / "datasets" / "f5tts" / "ref_audio" / "ref.wav").exists():
+                    job_manager.update_job(job_id, progress=20.0, stage="dataset", message="Building reference audio for Kokoro...")
+                    manifest_file = cdir.parent / "manifest.json"
+                    if manifest_file.exists():
+                        with open(manifest_file, "r", encoding="utf-8") as mf:
+                            mdata = json.load(mf)
+                        clips = [c for c in mdata.get("clips", []) if c.get("character", "").upper() == cdir.name.upper()]
+                        if clips:
+                            DatasetBuilder(cdir).build_kokoro_dataset(clips)
+
+                def _kokoro_progress(pct: float, msg: str):
+                    scaled_pct = 20.0 + (pct / 100.0) * 78.0
+                    job_manager.update_job(job_id, progress=scaled_pct, stage="train", message=msg)
+
+                job_manager.update_job(job_id, progress=35.0, stage="train", message="Configuring Kokoro-82M style embeddings and character profile...")
+                k_ds = (cdir / "datasets" / "kokoro") if (cdir / "datasets" / "kokoro").exists() else (cdir / "datasets" / "f5tts")
+                res = trainer.train_kokoro(k_ds, progress_callback=_kokoro_progress)
+                complete_msg = f"✓ Kokoro-82M StyleTTS 2 voice profile ready for {cdir.name}!"
             else:
                 raise ValueError(f"Unknown engine: {eng}")
 

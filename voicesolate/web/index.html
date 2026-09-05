@@ -580,10 +580,45 @@
               </div>
             </div>
 
+            <!-- Kokoro Style & Voice Blend Options -->
+            <div class="form-group" id="groupKokoroOptions">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label class="form-label" for="studioKokoroVoiceSelect" style="margin-bottom:0;">
+                  🌸 Kokoro Voice Style / Timbre Blend:
+                </label>
+                <span style="font-size:11px; color:var(--accent-emerald, #34d399); font-weight:600;">82M Single-Pass StyleTTS 2</span>
+              </div>
+              <div style="font-size:11px; color:var(--text-dim); margin:3px 0 6px 0;">
+                Select custom trained character style vector or audition warm storyteller / classic persona presets.
+              </div>
+              <select id="studioKokoroVoiceSelect" class="form-select">
+                <option value="character_custom">✨ Character Custom Style (Trained / Blended Style Profile)</option>
+                <option value="am_santa">am_santa (Elder Storyteller — Deep, Warm, Resonant Male)</option>
+                <option value="am_fenrir">am_fenrir (Deep Authoritative Resonance — Gravitas Male)</option>
+                <option value="am_michael">am_michael (Warm Natural Narrator — Conversational Male)</option>
+                <option value="am_adam">am_adam (Classic American Male — Clear &amp; Articulate)</option>
+                <option value="af_bella">af_bella (Warm Expressive Female — Natural Cadence)</option>
+                <option value="af_sarah">af_sarah (Dynamic American Female — Narrative Read)</option>
+                <option value="bm_george">bm_george (British Gentleman — Distinguished Tone)</option>
+                <option value="bf_emma">bf_emma (British Female — Crisp Theatrical)</option>
+              </select>
+            </div>
+
             <!-- Model Selection Checkboxes -->
             <div class="form-group">
               <label class="form-label">Select Voice Models to Generate (Simultaneous Audition):</label>
-              <div class="engine-checkbox-row" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px;">
+              <div class="engine-checkbox-row" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:12px;">
+                <div class="engine-select-card-wrapper" id="cardWrapperKokoro">
+                  <label class="engine-checkbox-card" id="cardCheckKokoro" style="width:100%; margin:0;">
+                    <input type="checkbox" id="checkEngineKokoro" value="kokoro" checked>
+                    <div>
+                      <strong style="color:#fff; font-size:13px;">Kokoro-82M</strong>
+                      <div style="font-size:11px; color:var(--text-dim);">StyleTTS 2 (24kHz)</div>
+                    </div>
+                  </label>
+                  <div class="engine-card-action" id="actionKokoro" style="margin-top:6px;"></div>
+                </div>
+
                 <div class="engine-select-card-wrapper" id="cardWrapperF5">
                   <label class="engine-checkbox-card" id="cardCheckF5" style="width:100%; margin:0;">
                     <input type="checkbox" id="checkEngineF5" value="f5-tts" checked>

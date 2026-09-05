@@ -10,6 +10,7 @@ import importlib.util
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import soundfile as sf
+import numpy as np
 import torch
 import warnings
 import urllib.parse
@@ -54,6 +55,14 @@ ENGINE_SPECS = {
         "architecture": "Fast CPU Neural VITS (22.05kHz)",
         "badge": "Piper VITS",
         "samplerate": 22050,
+    },
+    "kokoro": {
+        "id": "kokoro",
+        "name": "Kokoro-82M",
+        "display": "Kokoro (StyleTTS 2 / 82M)",
+        "architecture": "Single-Pass StyleTTS 2 (82M ONNX / 24kHz)",
+        "badge": "Kokoro 82M",
+        "samplerate": 24000,
     }
 }
 
@@ -65,6 +74,8 @@ def resolve_engine_meta(engine_id_or_hint: str, samplerate: Optional[int] = None
         return dict(ENGINE_SPECS["xtts-v2"])
     elif "piper" in hint:
         return dict(ENGINE_SPECS["piper"])
+    elif "kokoro" in hint or "styletts" in hint:
+        return dict(ENGINE_SPECS["kokoro"])
 
     if samplerate == 22050:
         return dict(ENGINE_SPECS["piper"])
@@ -107,6 +118,7 @@ class EngineService:
         self._xtts_model = None
         self._piper_voice = None
         self._loaded_piper_model_path = None
+        self._kokoro_model = None
         self.cache_synth_dir = Path("cache/synthesized").resolve()
         self.cache_synth_dir.mkdir(parents=True, exist_ok=True)
 
@@ -144,6 +156,7 @@ class EngineService:
                 "f5_tts": self._is_module_available("f5_tts"),
                 "TTS": self._is_module_available("TTS"),
                 "piper": self._is_module_available("piper"),
+                "kokoro": self._is_module_available("kokoro_onnx") or self._is_module_available("kokoro"),
                 "demucs": self._is_module_available("demucs"),
                 "faster_whisper": self._is_module_available("faster_whisper")
             }
@@ -154,6 +167,7 @@ class EngineService:
         f5_pkg = self._is_module_available("f5_tts")
         xtts_pkg = self._is_module_available("TTS")
         piper_pkg = self._is_module_available("piper")
+        kokoro_pkg = self._is_module_available("kokoro_onnx") or self._is_module_available("kokoro")
 
         # Check character assets if provided
         f5_ready = False
@@ -162,6 +176,10 @@ class EngineService:
         piper_dataset_ready = False
         piper_onnx_path = None
         is_piper_trained = False
+        kokoro_ready = False
+        kokoro_dataset_ready = False
+        kokoro_profile_path = None
+        is_kokoro_trained = False
 
         if character_dir and Path(character_dir).exists():
             cdir = Path(character_dir)
@@ -170,6 +188,27 @@ class EngineService:
 
             xtts_ref = cdir / "datasets" / "xtts" / "reference_audio"
             xtts_ready = xtts_pkg and (xtts_ref.exists() and len(list(xtts_ref.glob("*.wav"))) > 0)
+
+            # Kokoro check
+            kokoro_dir = cdir / "models" / "kokoro"
+            kokoro_prof = kokoro_dir / "kokoro_profile.json"
+            char_slug = cdir.name.lower().replace(" ", "_")
+            style_file = kokoro_dir / f"{char_slug}_style.npy"
+            custom_style = kokoro_dir / "custom_style.npy"
+            kokoro_ref = cdir / "datasets" / "kokoro" / "ref_audio" / "ref.wav"
+
+            if kokoro_prof.exists():
+                kokoro_profile_path = str(kokoro_prof.resolve())
+                is_kokoro_trained = bool(kokoro_pkg and (style_file.exists() or custom_style.exists() or kokoro_prof.exists()))
+            elif style_file.exists():
+                kokoro_profile_path = str(style_file.resolve())
+                is_kokoro_trained = bool(kokoro_pkg)
+            elif custom_style.exists():
+                kokoro_profile_path = str(custom_style.resolve())
+                is_kokoro_trained = bool(kokoro_pkg)
+
+            kokoro_dataset_ready = kokoro_ref.exists() or f5_ref.exists()
+            kokoro_ready = kokoro_pkg and (is_kokoro_trained or kokoro_dataset_ready)
 
             # Piper ONNX resolution
             piper_dir = cdir / "models" / "piper"
@@ -203,6 +242,7 @@ class EngineService:
         else:
             f5_ready = f5_pkg
             xtts_ready = xtts_pkg
+            kokoro_ready = kokoro_pkg
 
         # Check model files on disk
         f5_model_path = None
@@ -210,6 +250,7 @@ class EngineService:
         f5_dataset_path = None
         xtts_dataset_path = None
         piper_dataset_path = None
+        kokoro_dataset_path = None
 
         if character_dir and Path(character_dir).exists():
             cdir = Path(character_dir)
@@ -225,6 +266,9 @@ class EngineService:
 
             if (cdir / "datasets" / "piper").exists():
                 piper_dataset_path = str((cdir / "datasets" / "piper").resolve())
+
+            if (cdir / "datasets" / "kokoro").exists():
+                kokoro_dataset_path = str((cdir / "datasets" / "kokoro").resolve())
 
         # Check piper_train availability
         has_piper_train = (shutil.which("piper_train") is not None) or (shutil.which("piper-train") is not None)
@@ -260,6 +304,20 @@ class EngineService:
                 "type": "zero_shot",
                 "description": "Deep autoregressive speaker latent cloning, multilingual with high emotional expression.",
                 "install_hint": "pip install TTS" if not xtts_pkg else None
+            },
+            {
+                "id": "kokoro",
+                "name": "Kokoro-82M",
+                "architecture": "Single-Pass StyleTTS 2 (82M ONNX / 24kHz)",
+                "installed": kokoro_pkg,
+                "ready": kokoro_ready,
+                "trained": is_kokoro_trained,
+                "dataset_ready": kokoro_dataset_ready,
+                "model_path": kokoro_profile_path if is_kokoro_trained else None,
+                "dataset_path": kokoro_dataset_path,
+                "type": "styletts2_onnx",
+                "description": "Ultra-fast ~1s single-pass StyleTTS 2 with 256-dim style embedding cloning, warm natural prosody, and 24kHz output.",
+                "install_hint": "pip install kokoro-onnx" if not kokoro_pkg else None
             },
             {
                 "id": "piper",
@@ -411,6 +469,30 @@ class EngineService:
         self._f5_model = F5TTS(device=device)
         return self._f5_model
 
+    def _get_kokoro_model(self):
+        if self._kokoro_model is not None:
+            return self._kokoro_model
+
+        cache_dir = Path("cache/models/kokoro").resolve()
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        onnx_path = cache_dir / "kokoro-v1.0.onnx"
+        voices_path = cache_dir / "voices-v1.0.bin"
+
+        import urllib.request
+        if not onnx_path.exists() or onnx_path.stat().st_size < 100_000_000:
+            logger.info("Downloading kokoro-v1.0.onnx base checkpoint...")
+            url = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx"
+            urllib.request.urlretrieve(url, onnx_path)
+
+        if not voices_path.exists() or voices_path.stat().st_size < 10_000_000:
+            logger.info("Downloading voices-v1.0.bin...")
+            url = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin"
+            urllib.request.urlretrieve(url, voices_path)
+
+        from kokoro_onnx import Kokoro
+        self._kokoro_model = Kokoro(str(onnx_path), str(voices_path))
+        return self._kokoro_model
+
     def synthesize(
         self,
         character_dir: Path,
@@ -420,7 +502,8 @@ class EngineService:
         seed: int = 42,
         ref_audio_path: Optional[str] = None,
         cfg_strength: float = 5.0,
-        nfe_step: int = 48
+        nfe_step: int = 48,
+        voice_preset: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Executes in-process synthesis with selected engine.
@@ -435,7 +518,7 @@ class EngineService:
 
         # Standardized naming: synth_{character}_{engine_slug}_{timestamp}_{rand}
         char_slug = re.sub(r'[^a-zA-Z0-9_-]', '', cdir.name.lower()) or "voice"
-        eng_slug = "f5tts" if "f5" in engine_clean else ("xtts" if "xtts" in engine_clean or "coqui" in engine_clean else "piper")
+        eng_slug = "f5tts" if "f5" in engine_clean else ("xtts" if "xtts" in engine_clean or "coqui" in engine_clean else ("kokoro" if "kokoro" in engine_clean else "piper"))
         timestamp_int = int(time.time())
         rand_id = uuid.uuid4().hex[:6]
         synth_id = f"synth_{char_slug}_{eng_slug}_{timestamp_int}_{rand_id}"
@@ -577,6 +660,33 @@ class EngineService:
             with wave.open(str(out_wav), "wb") as wav_f:
                 self._piper_voice.synthesize_wav(text.strip(), wav_f, syn_config=syn_config)
 
+        elif "kokoro" in engine_clean:
+            kokoro = self._get_kokoro_model()
+            char_slug = cdir.name.lower().replace(" ", "_")
+            kokoro_dir = cdir / "models" / "kokoro"
+
+            chosen_voice = None
+            if voice_preset and voice_preset.strip() and voice_preset != "character_custom":
+                chosen_voice = voice_preset.strip()
+            else:
+                # Check for trained character style tensor
+                char_style = kokoro_dir / f"{char_slug}_style.npy"
+                custom_style = kokoro_dir / "custom_style.npy"
+                if char_style.exists():
+                    chosen_voice = np.load(str(char_style))
+                elif custom_style.exists():
+                    chosen_voice = np.load(str(custom_style))
+                else:
+                    # Dynamically blend Mark Twain warm resonant narrator preset
+                    v1 = kokoro.get_voice_style("am_santa")
+                    v2 = kokoro.get_voice_style("am_fenrir")
+                    v3 = kokoro.get_voice_style("am_michael")
+                    chosen_voice = (0.55 * v1 + 0.30 * v2 + 0.15 * v3).astype(np.float32)
+
+            safe_speed = max(0.5, min(2.0, float(speed)))
+            samples, sr = kokoro.create(text.strip(), voice=chosen_voice, speed=safe_speed, lang="en-us")
+            sf.write(str(out_wav), samples, sr)
+
         else:
             raise ValueError(f"Unknown engine: {engine_id}")
 
@@ -597,6 +707,7 @@ class EngineService:
             "seed": int(seed) if seed is not None else 42,
             "cfg_strength": float(cfg_strength) if cfg_strength is not None else 5.0,
             "nfe_step": int(nfe_step) if nfe_step is not None else 48,
+            "voice_preset": voice_preset or ("character_custom" if "kokoro" in engine_clean else None),
             "duration": round(info.duration, 2),
             "samplerate": info.samplerate,
             "created_at": time.time(),
@@ -624,6 +735,7 @@ class EngineService:
             "seed": int(seed) if seed is not None else 42,
             "cfg_strength": float(cfg_strength) if cfg_strength is not None else 5.0,
             "nfe_step": int(nfe_step) if nfe_step is not None else 48,
+            "voice_preset": meta_payload["voice_preset"],
             "created_at": meta_payload["created_at"]
         }
 
