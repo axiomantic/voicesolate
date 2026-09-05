@@ -365,9 +365,9 @@ class ModelTrainer:
         # Select optimal base blend anchors
         if is_clemens:
             character_type = "elder_theatrical_storyteller"
-            base_voice = "am_santa"
-            # Clemens Missouri Drawl anchor: Santa (warmth/elder gravitas), Eric (sibilant clarity/pitch match), Fenrir (chest gravel), Puck (dynamic modulation)
-            blend_weights = {"am_santa": 0.40, "am_eric": 0.30, "am_fenrir": 0.20, "am_puck": 0.10}
+            base_voice = "am_onyx"
+            # Clemens Missouri Drawl deep baritone anchor: Onyx (deep resonant bass 83Hz), Lewis (80Hz chest baritone), George (theatrical warmth), Fenrir (gravel/rasp)
+            blend_weights = {"am_onyx": 0.45, "bm_lewis": 0.30, "bm_george": 0.15, "am_fenrir": 0.10}
         elif f0_median < 145.0:
             character_type = "deep_resonant_male"
             base_voice = "am_fenrir"
@@ -551,7 +551,7 @@ class ModelTrainer:
                 s = cur_ref[:, :, 128:].squeeze(0)  # (1, 128)
                 d = kmodel.predictor.text_encoder(d_en, s, input_len, t_mask)
                 x, _ = kmodel.predictor.lstm(d)
-                drawl_speed = 0.86 if is_clemens else 1.0
+                drawl_speed = 0.78 if is_clemens else 1.0
                 duration = torch.sigmoid(kmodel.predictor.duration_proj(x)).sum(axis=-1) / drawl_speed
                 pred_dur = torch.round(duration).clamp(min=1).long().squeeze()
                 if pred_dur.ndim == 0:
@@ -647,7 +647,7 @@ class ModelTrainer:
             "ref_audio": str(dest_ref.resolve()),
             "kanade_model": "frothywater/kanade-25hz-clean",
             "vocoder": "hift",
-            "recommended_speed": 0.86 if is_clemens else 0.95,
+            "recommended_speed": 0.78 if is_clemens else 0.95,
             "status": "trained"
         }
         with open(profile_json, "w", encoding="utf-8") as f:

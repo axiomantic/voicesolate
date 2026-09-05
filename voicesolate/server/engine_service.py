@@ -121,10 +121,14 @@ class EngineService:
         p = phonemes
         # Vowel elongation on stressed syllables
         p = re.sub(r'([ˈˌ][æɛɑɔʌiIuAO])(?![ː])', r'\1ː', p)
+        # 19th-century Missouri participle reduction: -ing -> -in'
+        p = re.sub(r'ɪŋ\b', r'ɪn', p)
         # Pronoun 'I' monophthongization / drawl
         p = re.sub(r'(\b| )ˌI\b', r'\1ˌaː', p)
-        # Contemplative pauses at commas and semicolons
-        p = re.sub(r'([,;]) ', r'… ', p)
+        # Contemplative theatrical pauses at commas, semicolons, and dashes
+        p = re.sub(r'([,;—\-])\s*', r'… ', p)
+        # Deep dramatic pauses at ellipsis
+        p = re.sub(r'(\.{3}|…)\s*', r'… … ', p)
         return p
 
     DEFAULT_QUOTES = [
@@ -762,7 +766,7 @@ class EngineService:
             # It provides pristine 24kHz studio audio with ZERO vocoded/tinny artifacts in ~0.4s!
             # Only run Kanade if explicitly requested via voice_preset containing "kanade".
             apply_conversion = False
-            base_voice = profile_data.get("base_voice", "am_santa" if is_clemens else "am_michael")
+            base_voice = profile_data.get("base_voice", "am_onyx" if is_clemens else "am_michael")
             char_style_file = kokoro_dir / f"{char_slug}_style.npy"
             char_pt_file = kokoro_dir / f"{char_slug}_style.pt"
             custom_style_file = kokoro_dir / "custom_style.npy"
@@ -790,10 +794,10 @@ class EngineService:
                 if v_bin.exists():
                     v_bank = np.load(str(v_bin))
                     chosen_np_voice = (
-                        0.40 * v_bank["am_santa"] +
-                        0.30 * v_bank["am_eric"] +
-                        0.20 * v_bank["am_fenrir"] +
-                        0.10 * v_bank["am_puck"]
+                        0.45 * v_bank["am_onyx"] +
+                        0.30 * v_bank["bm_lewis"] +
+                        0.15 * v_bank["bm_george"] +
+                        0.10 * v_bank["am_fenrir"]
                     ).astype(np.float32)
                     chosen_torch_voice = torch.from_numpy(chosen_np_voice)
 
@@ -808,15 +812,15 @@ class EngineService:
                     apply_conversion = True
                 elif vp in ["character_custom", "mark_twain", "clone", "default"]:
                     pass
-                elif vp in ["am_michael", "am_adam", "am_fenrir", "am_santa", "am_eric", "am_puck", "af_bella", "af_sarah", "af_nicole", "bm_george", "bf_emma"]:
+                elif vp in ["am_onyx", "bm_lewis", "am_michael", "am_adam", "am_fenrir", "am_santa", "am_eric", "am_puck", "af_bella", "af_sarah", "af_nicole", "bm_george", "bf_emma"]:
                     base_voice = vp
                     chosen_np_voice = vp
                     chosen_torch_voice = vp
 
-            # Calibrate speech rate: deliberate 19th-century drawl cadence (~0.86x)
+            # Calibrate speech rate: deliberate 19th-century drawl cadence (~0.78x for Clemens)
             safe_speed = max(0.5, min(2.0, float(speed)))
             if has_missouri_drawl and 0.95 <= safe_speed <= 1.05:
-                safe_speed = float(profile_data.get("recommended_speed", 0.86))
+                safe_speed = float(profile_data.get("recommended_speed", 0.78 if is_clemens else 0.86))
 
             samples = None
             sr = 24000
