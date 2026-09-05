@@ -559,6 +559,9 @@ def synthesize_speech(req: SynthesizeRequest):
             nfe_step=req.nfe_step
         )
         return res
+    except FileNotFoundError as e:
+        logger.warning(f"Synthesis validation failed: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.exception("Synthesis failed")
         raise HTTPException(status_code=500, detail=str(e))

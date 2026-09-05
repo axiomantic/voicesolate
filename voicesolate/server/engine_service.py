@@ -161,6 +161,7 @@ class EngineService:
         piper_ready = False
         piper_dataset_ready = False
         piper_onnx_path = None
+        is_piper_trained = False
 
         if character_dir and Path(character_dir).exists():
             cdir = Path(character_dir)
@@ -181,23 +182,20 @@ class EngineService:
                 except Exception:
                     pass
 
+            char_slug = cdir.name.lower().replace(" ", "_")
             if vj_data.get("model_file") and (piper_dir / vj_data["model_file"]).exists():
                 piper_onnx_path = str((piper_dir / vj_data["model_file"]).resolve())
+            elif (piper_dir / f"{char_slug}.onnx").exists():
+                piper_onnx_path = str((piper_dir / f"{char_slug}.onnx").resolve())
             else:
-                char_slug = cdir.name.lower().replace(" ", "_")
-                candidate = piper_dir / f"{char_slug}.onnx"
-                if candidate.exists():
-                    piper_onnx_path = str(candidate.resolve())
-                else:
-                    onnx_files = list(piper_dir.glob("*.onnx")) if piper_dir.exists() else []
-                    non_baseline = [p for p in onnx_files if not any(b in p.name.lower() for b in ["bryce", "en_us", "baseline"])]
-                    if non_baseline:
-                        piper_onnx_path = str(non_baseline[0].resolve())
-                    elif onnx_files:
-                        piper_onnx_path = str(onnx_files[0].resolve())
+                onnx_files = list(piper_dir.glob("*.onnx")) if piper_dir.exists() else []
+                char_models = [p for p in onnx_files if not any(b in p.name.lower() for b in ["bryce", "en_us", "baseline", "generic"])]
+                if char_models:
+                    piper_onnx_path = str(char_models[0].resolve())
 
-            if piper_onnx_path:
-                piper_ready = piper_pkg
+            # Piper is ONLY ready/trained if a character-specific trained model exists
+            is_piper_trained = bool(piper_pkg and piper_onnx_path and (vj_data.get("status") == "trained" or piper_onnx_path is not None))
+            piper_ready = is_piper_trained
             
             # Piper dataset
             piper_ds = cdir / "datasets" / "piper" / "metadata.csv"
@@ -236,18 +234,6 @@ class EngineService:
         except ImportError:
             pass
 
-        piper_is_baseline = False
-        if piper_onnx_path:
-            p_name = Path(piper_onnx_path).name.lower()
-            status = vj_data.get("status", "") if "vj_data" in locals() else ""
-            is_named_baseline = any(b in p_name for b in ["bryce", "en_us", "baseline"])
-            if status == "trained":
-                piper_is_baseline = False
-            elif is_named_baseline or status in ["ready_to_train", "baseline"]:
-                piper_is_baseline = True
-            else:
-                piper_is_baseline = False
-
         engines = [
             {
                 "id": "f5-tts",
@@ -282,13 +268,13 @@ class EngineService:
                 "installed": piper_pkg,
                 "trainer_installed": has_piper_train,
                 "ready": piper_ready,
-                "trained": piper_ready and piper_onnx_path is not None and not piper_is_baseline,
-                "is_baseline": piper_is_baseline,
+                "trained": is_piper_trained,
+                "is_baseline": False,
                 "dataset_ready": piper_dataset_ready,
-                "model_path": piper_onnx_path if not piper_is_baseline else None,
+                "model_path": piper_onnx_path if is_piper_trained else None,
                 "dataset_path": piper_dataset_path,
                 "type": "compiled_onnx",
-                "description": "Ultra-fast, lightweight embedded neural voice running locally on CPU in real-time. (Requires piper-train to fine-tune on character data).",
+                "description": "Ultra-fast, lightweight embedded neural voice running locally on CPU in real-time fine-tuned on character audio.",
                 "install_hint": "pip install piper-tts" if not piper_pkg else ("pip install piper-train" if not has_piper_train else None)
             }
         ]
@@ -545,26 +531,22 @@ class EngineService:
                 except Exception:
                     pass
 
+            char_slug = cdir.name.lower().replace(" ", "_")
             onnx_path = None
             if vj_data.get("model_file") and (piper_dir / vj_data["model_file"]).exists():
                 onnx_path = piper_dir / vj_data["model_file"]
+            elif (piper_dir / f"{char_slug}.onnx").exists():
+                onnx_path = piper_dir / f"{char_slug}.onnx"
             else:
-                char_slug = cdir.name.lower().replace(" ", "_")
-                candidate = piper_dir / f"{char_slug}.onnx"
-                if candidate.exists():
-                    onnx_path = candidate
-                else:
-                    onnx_files = list(piper_dir.glob("*.onnx")) if piper_dir.exists() else []
-                    non_baseline = [p for p in onnx_files if not any(b in p.name.lower() for b in ["bryce", "en_us", "baseline"])]
-                    if non_baseline:
-                        onnx_path = non_baseline[0]
-                    elif onnx_files:
-                        onnx_path = onnx_files[0]
+                onnx_files = list(piper_dir.glob("*.onnx")) if piper_dir.exists() else []
+                char_models = [p for p in onnx_files if not any(b in p.name.lower() for b in ["bryce", "en_us", "baseline", "generic", "stock"])]
+                if char_models:
+                    onnx_path = char_models[0]
 
             if not onnx_path or not onnx_path.exists():
                 raise FileNotFoundError(
-                    "Piper ONNX model not compiled yet for this character. "
-                    "Use the Dataset & Engine Hub to compile or download a voice profile."
+                    f"Piper voice model has not been trained for character '{cdir.name}'. "
+                    "Voice cloning requires training on this character's isolated audio clips in Step 3."
                 )
 
             json_path = onnx_path.with_suffix(".onnx.json")

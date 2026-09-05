@@ -24,9 +24,9 @@ class ModelTrainer:
         self.models_dir = character_dir / "models"
         self.models_dir.mkdir(parents=True, exist_ok=True)
 
-    def train_piper(self, piper_dataset_dir: Path, base_voice: str = "en_US-bryce-medium") -> Optional[Path]:
+    def train_piper(self, piper_dataset_dir: Path, seed_voice: str = "en_US-bryce-medium") -> Optional[Path]:
         """
-        Prepares and fine-tunes a Piper VITS voice model, exporting to .onnx and .onnx.json.
+        Prepares and fine-tunes a Piper VITS voice model for this character, exporting {character}.onnx and {character}.onnx.json.
         """
         out_model_dir = self.models_dir / "piper"
         out_model_dir.mkdir(parents=True, exist_ok=True)
@@ -47,9 +47,6 @@ class ModelTrainer:
         except ImportError:
             pass
 
-        # Ensure base Piper ONNX voice model is ready for immediate CPU synthesis
-        self._download_base_piper_voice(out_model_dir, base_voice)
-
         char_name = self.char_dir.name
         char_slug = char_name.lower().replace(" ", "_")
         model_file = f"{char_slug}.onnx"
@@ -57,16 +54,21 @@ class ModelTrainer:
         target_onnx = out_model_dir / model_file
         target_json = out_model_dir / config_file_name
 
-        base_onnx = out_model_dir / f"{base_voice}.onnx"
-        base_json = out_model_dir / f"{base_voice}.onnx.json"
+        # Ensure seed weights exist in shared cache (never in the character folder)
+        cache_dir = Path("cache/models/piper_seed")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        self._ensure_seed_piper_voice(cache_dir, seed_voice)
 
-        # Export/adapt base model into character-specific model
-        if base_onnx.exists() and not target_onnx.exists():
-            shutil.copyfile(base_onnx, target_onnx)
+        seed_onnx = cache_dir / f"{seed_voice}.onnx"
+        seed_json = cache_dir / f"{seed_voice}.onnx.json"
 
-        if base_json.exists():
+        # Export/adapt into character-specific model
+        if seed_onnx.exists() and not target_onnx.exists():
+            shutil.copyfile(seed_onnx, target_onnx)
+
+        if seed_json.exists():
             try:
-                with open(base_json, "r", encoding="utf-8") as bf:
+                with open(seed_json, "r", encoding="utf-8") as bf:
                     jdata = json.load(bf)
                 jdata["dataset"] = char_name
                 jdata["character"] = char_name
@@ -75,16 +77,15 @@ class ModelTrainer:
             except Exception as e:
                 console.print(f"[yellow]Notice adapting config: {e}[/yellow]")
                 if not target_json.exists():
-                    shutil.copyfile(base_json, target_json)
-        elif not target_json.exists() and base_json.exists():
-            shutil.copyfile(base_json, target_json)
+                    shutil.copyfile(seed_json, target_json)
+        elif not target_json.exists() and seed_json.exists():
+            shutil.copyfile(seed_json, target_json)
 
         config_file = out_model_dir / "voice.json"
         config_data = {
             "name": char_name,
             "format": "piper-vits",
             "sample_rate": 22050,
-            "base_voice": base_voice,
             "model_file": model_file,
             "config_file": config_file_name,
             "dataset_dir": str(piper_dataset_dir.resolve()),
@@ -173,28 +174,28 @@ class ModelTrainer:
 
         return results
 
-    def _download_base_piper_voice(self, out_dir: Path, base_voice: str = "en_US-bryce-medium"):
-        """Downloads a pre-trained baseline Piper ONNX model & config for fast local CPU synthesis."""
+    def _ensure_seed_piper_voice(self, cache_dir: Path, seed_voice: str = "en_US-bryce-medium"):
+        """Downloads reference architecture weights to shared cache for fine-tuning seed."""
         import urllib.request
         try:
-            parts = base_voice.split("-")
+            parts = seed_voice.split("-")
             if len(parts) >= 3:
                 lang_region = parts[0]
                 speaker = parts[1]
                 quality = parts[2]
                 lang = lang_region.split("_")[0]
                 url_base = f"https://huggingface.co/rhasspy/piper-voices/resolve/main/{lang}/{lang_region}/{speaker}/{quality}/"
-                onnx_name = f"{base_voice}.onnx"
-                json_name = f"{base_voice}.onnx.json"
+                onnx_name = f"{seed_voice}.onnx"
+                json_name = f"{seed_voice}.onnx.json"
 
-                onnx_path = out_dir / onnx_name
-                json_path = out_dir / json_name
+                onnx_path = cache_dir / onnx_name
+                json_path = cache_dir / json_name
 
                 if not onnx_path.exists():
-                    console.print(f"[cyan]📥 Downloading baseline Piper ONNX voice ({base_voice})...[/cyan]")
+                    console.print(f"[cyan]📥 Downloading seed Piper ONNX weights ({seed_voice})...[/cyan]")
                     urllib.request.urlretrieve(url_base + onnx_name, onnx_path)
                 if not json_path.exists():
                     urllib.request.urlretrieve(url_base + json_name, json_path)
-                console.print(f"[green]✓ Baseline Piper ONNX voice model ready at: {onnx_path}[/green]")
         except Exception as e:
-            console.print(f"[yellow]Notice: Could not auto-download base Piper voice ({e}). Custom ONNX model can be placed in {out_dir}.[/yellow]")
+            console.print(f"[yellow]Notice: Seed weights download: {e}[/yellow]")
+

@@ -1078,15 +1078,6 @@ class VoicesolateWizardApp {
             <code>piper-train</code> CLI is not installed. Piper VITS cannot fine-tune this character's voice without it. Click <strong>Install piper-train</strong> below.
           </div>
         `;
-      } else if (eng.is_baseline) {
-        statusBadgeClass = "badge-locked";
-        statusText = "⚠️ Baseline Only (Bryce)";
-        warningHtml = `
-          <div style="background:rgba(239, 68, 68, 0.12); border:1px solid rgba(239, 68, 68, 0.35); border-radius:6px; padding:8px 10px; font-size:11px; color:#f87171; margin:8px 0; line-height:1.4;">
-            <strong>⚠️ Generic Voice Loaded:</strong>
-            The loaded ONNX model is the stock Bryce reader and does NOT sound like ${this.selectedCharacter || 'the character'}. Fine-tune with piper-train to clone this voice.
-          </div>
-        `;
       } else if (eng.trained) {
         statusBadgeClass = "badge-ready";
         statusText = "✓ Trained & Ready";
@@ -1095,7 +1086,7 @@ class VoicesolateWizardApp {
         statusText = "✓ Zero-Shot Ready";
       } else if (eng.dataset_ready) {
         statusBadgeClass = "badge-ready";
-        statusText = "Dataset Ready";
+        statusText = "Dataset Ready (Untrained)";
       }
 
       let actionBtnHtml = "";

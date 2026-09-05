@@ -148,3 +148,16 @@ class TestApiEndpoints:
         assert piper["model_path"] is not None
         assert "clemens.onnx" in piper["model_path"].lower()
 
+    def test_untrained_piper_rejection_no_bryce_fallback(self, client: TestClient):
+        # Negative control: Synthesis for character without Piper model must reject and never fallback to Bryce
+        res = client.post(
+            "/api/v1/synthesize",
+            json={
+                "character_name": "NONEXISTENT_GHOST_CHARACTER_999",
+                "engine": "piper",
+                "text": "Testing fallback elimination."
+            }
+        )
+        assert res.status_code == 404
+
+
