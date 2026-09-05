@@ -683,8 +683,37 @@ def train_model(req: TrainModelRequest, background_tasks: BackgroundTasks):
             complete_msg = f"✓ {eng.upper()} voice model prepared successfully for {cdir.name}!"
 
             if "piper" in eng_norm or "onnx" in eng_norm:
+                # 1. Require / Prepare F5-TTS Teacher Model
+                f5_ref_wav = cdir / "datasets" / "f5tts" / "ref_audio" / "ref.wav"
+                f5_profile = cdir / "models" / "f5tts" / "f5_profile.json"
+                f5_ready = f5_ref_wav.exists() or f5_profile.exists()
+
+                if not f5_ready:
+                    manifest_file = cdir.parent / "manifest.json"
+                    if manifest_file.exists():
+                        with open(manifest_file, "r", encoding="utf-8") as mf:
+                            mdata = json.load(mf)
+                        clips = [c for c in mdata.get("clips", []) if c.get("character", "").upper() == cdir.name.upper()]
+                        if clips:
+                            job_manager.update_job(job_id, progress=12.0, stage="dataset", message="Configuring F5-TTS teacher reference audio...")
+                            DatasetBuilder(cdir).build_f5tts_dataset(clips)
+                            trainer.train_f5tts(datasets["f5tts"])
+                            f5_ready = (cdir / "datasets" / "f5tts" / "ref_audio" / "ref.wav").exists() or (cdir / "models" / "f5tts" / "f5_profile.json").exists()
+
+                if not f5_ready:
+                    job_manager.update_job(
+                        job_id,
+                        progress=15.0,
+                        stage="error",
+                        status="failed",
+                        error="F5-TTS teacher engine is not configured. Piper requires an F5-TTS teacher model to synthesize the expanded expressive corpus before fine-tuning.",
+                        message="Training failed: F5-TTS teacher must be trained/configured before Piper. Train F5-TTS in Step 3."
+                    )
+                    return
+
+                # 2. Build baseline LJSpeech dataset clips if missing
                 if not (cdir / "datasets" / "piper" / "metadata.csv").exists():
-                    job_manager.update_job(job_id, progress=20.0, stage="dataset", message="Building LJSpeech dataset clips for Piper...")
+                    job_manager.update_job(job_id, progress=16.0, stage="dataset", message="Building LJSpeech dataset clips for Piper...")
                     manifest_file = cdir.parent / "manifest.json"
                     if manifest_file.exists():
                         with open(manifest_file, "r", encoding="utf-8") as mf:
@@ -692,6 +721,33 @@ def train_model(req: TrainModelRequest, background_tasks: BackgroundTasks):
                         clips = [c for c in mdata.get("clips", []) if c.get("character", "").upper() == cdir.name.upper()]
                         if clips:
                             DatasetBuilder(cdir).build_piper_ljspeech(clips)
+
+                # 3. Distill and expand training corpus using F5-TTS teacher at maximum exaggeration
+                dataset_info_path = cdir / "datasets" / "piper" / "dataset.json"
+                is_distilled = False
+                if dataset_info_path.exists():
+                    try:
+                        with open(dataset_info_path, "r", encoding="utf-8") as f:
+                            dinfo = json.load(f)
+                        is_distilled = dinfo.get("distilled_with_f5", False) and dinfo.get("num_clips", 0) >= 40
+                    except Exception:
+                        pass
+
+                if not is_distilled:
+                    def _distill_prog(pct: float, msg: str):
+                        scaled_pct = 16.0 + (pct / 100.0) * 20.0
+                        job_manager.update_job(job_id, progress=scaled_pct, stage="dataset", message=msg)
+
+                    job_manager.update_job(job_id, progress=17.0, stage="dataset", message="Generating expanded Mark Twain speech corpus with F5-TTS teacher (CFG=5.5)...")
+                    try:
+                        DatasetBuilder(cdir).generate_distilled_piper_corpus(
+                            cfg_strength=5.5,
+                            nfe_step=48,
+                            speed=0.95,
+                            progress_callback=_distill_prog
+                        )
+                    except Exception as e:
+                        logger.warning(f"F5 corpus distillation encountered error or bypassed: {e}")
 
                 venv_bin = Path(sys.executable).parent
                 has_piper_train = (
@@ -709,7 +765,7 @@ def train_model(req: TrainModelRequest, background_tasks: BackgroundTasks):
                 if not has_piper_train:
                     job_manager.update_job(
                         job_id,
-                        progress=35.0,
+                        progress=38.0,
                         stage="error",
                         status="failed",
                         error="Missing dependency: 'piper-train' is not installed. Piper VITS requires the piper-train package to fine-tune weights on this character's dataset.",
@@ -718,7 +774,8 @@ def train_model(req: TrainModelRequest, background_tasks: BackgroundTasks):
                     return
 
                 def _piper_progress(pct: float, msg: str):
-                    job_manager.update_job(job_id, progress=pct, stage="train", message=msg)
+                    scaled_pct = 38.0 + (pct / 100.0) * 60.0
+                    job_manager.update_job(job_id, progress=scaled_pct, stage="train", message=msg)
 
                 res = trainer.train_piper(datasets["piper"], progress_callback=_piper_progress)
                 complete_msg = f"✓ Piper VITS voice model compiled successfully for {cdir.name}!"

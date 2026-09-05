@@ -1078,6 +1078,17 @@ class VoicesolateWizardApp {
             <code>piper-train</code> CLI is not installed. Piper VITS cannot fine-tune this character's voice without it. Click <strong>Install piper-train</strong> below.
           </div>
         `;
+      } else if (eng.id === "piper" && !eng.trained) {
+        const f5Eng = engines.find(e => e.id === "f5-tts");
+        const f5Ready = f5Eng && (f5Eng.trained || f5Eng.ready);
+        warningHtml = `
+          <div style="background:rgba(59, 130, 246, 0.12); border:1px solid rgba(59, 130, 246, 0.35); border-radius:6px; padding:8px 10px; font-size:11px; color:#60a5fa; margin:8px 0; line-height:1.4;">
+            <strong>ℹ️ Teacher-Student Distillation:</strong>
+            Piper fine-tuning uses <strong>F5-TTS</strong> at maximum prosody exaggeration (CFG=5.5) to synthesize an expanded Mark Twain corpus before fine-tuning neural weights.
+          </div>
+        `;
+        statusBadgeClass = "badge-ready";
+        statusText = "Ready for Distillation";
       } else if (eng.trained) {
         statusBadgeClass = "badge-ready";
         statusText = "✓ Trained & Ready";

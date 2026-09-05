@@ -335,3 +335,134 @@ class DatasetBuilder:
             results["f5tts"] = self.build_f5tts_dataset(final_clips)
 
         return results
+
+    def generate_distilled_piper_corpus(
+        self,
+        quote_list: Optional[List[str]] = None,
+        cfg_strength: float = 5.5,
+        nfe_step: int = 48,
+        speed: float = 0.95,
+        progress_callback: Optional[Any] = None,
+    ) -> Path:
+        """
+        Synthesizes an expanded, highly exaggerated speech corpus using F5-TTS
+        and merges it into Piper's LJSpeech dataset (datasets/piper).
+        """
+        f5_ref_wav = self.datasets_dir / "f5tts" / "ref_audio" / "ref.wav"
+        f5_ref_txt = self.datasets_dir / "f5tts" / "ref_audio" / "ref.txt"
+        ref_text_val = ""
+
+        if not f5_ref_wav.exists():
+            prof_file = self.models_dir / "f5tts" / "f5_profile.json"
+            if prof_file.exists():
+                try:
+                    with open(prof_file, "r", encoding="utf-8") as pf:
+                        pdata = json.load(pf)
+                    cand = Path(pdata.get("ref_audio", ""))
+                    if cand.exists():
+                        f5_ref_wav = cand
+                        if pdata.get("ref_text"):
+                            ref_text_val = pdata.get("ref_text")
+                except Exception:
+                    pass
+
+        if not f5_ref_wav.exists():
+            raise FileNotFoundError(
+                f"F5-TTS teacher reference audio not found for {self.char_name}. F5-TTS teacher model must be prepared first."
+            )
+
+        if not ref_text_val and f5_ref_txt.exists():
+            with open(f5_ref_txt, "r", encoding="utf-8") as f:
+                ref_text_val = f.read().strip()
+
+        piper_dir = self.datasets_dir / "piper"
+        wavs_dir = piper_dir / "wavs"
+        wavs_dir.mkdir(parents=True, exist_ok=True)
+        metadata_csv = piper_dir / "metadata.csv"
+
+        existing_rows = []
+        existing_ids = set()
+        if metadata_csv.exists():
+            with open(metadata_csv, "r", encoding="utf-8") as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped:
+                        parts = stripped.split("|")
+                        existing_ids.add(parts[0])
+                        existing_rows.append(stripped)
+
+        if quote_list is None:
+            try:
+                from voicesolate.character_quotes import get_expansion_corpus_for_character
+                quotes = get_expansion_corpus_for_character(self.char_name)
+            except Exception:
+                quotes = [
+                    "Madam, I'd be delighted. So, this is a space ship? You ever run into Halley's comet?",
+                    "The secret of getting ahead is getting started, and don't you ever forget it!",
+                    "Kindness is the language which the deaf can hear and the blind can see.",
+                    "Twenty years from now you will be more disappointed by the things you didn't do than by the ones you did do.",
+                ]
+        else:
+            quotes = quote_list
+
+        from voicesolate.server.engine_service import engine_service
+        f5_model = engine_service._get_f5_model()
+
+        temp_synth_dir = piper_dir / "_temp_synth"
+        temp_synth_dir.mkdir(parents=True, exist_ok=True)
+
+        added_count = 0
+        total_quotes = len(quotes)
+
+        for idx, text in enumerate(quotes):
+            clip_id = f"f5_distill_{idx:04d}"
+            target_wav = wavs_dir / f"{clip_id}.wav"
+
+            if clip_id in existing_ids and target_wav.exists():
+                continue
+
+            if progress_callback:
+                pct = ((idx + 1) / total_quotes) * 100.0
+                progress_callback(pct, f"Distilling corpus clip {idx + 1}/{total_quotes}: {text[:35]}...")
+
+            raw_temp_wav = temp_synth_dir / f"{clip_id}_raw.wav"
+            clean_text = text.strip().replace("|", " ")
+
+            f5_model.infer(
+                ref_file=str(f5_ref_wav.resolve()),
+                ref_text=ref_text_val,
+                gen_text=clean_text,
+                file_wave=str(raw_temp_wav),
+                speed=float(speed),
+                seed=42 + idx,
+                cfg_strength=float(cfg_strength),
+                nfe_step=int(nfe_step)
+            )
+
+            if raw_temp_wav.exists():
+                self._resample_audio(raw_temp_wav, target_wav, target_sr=22050)
+                raw_temp_wav.unlink(missing_ok=True)
+                existing_rows.append(f"{clip_id}|{clean_text}|{clean_text}")
+                existing_ids.add(clip_id)
+                added_count += 1
+
+        if temp_synth_dir.exists():
+            shutil.rmtree(temp_synth_dir, ignore_errors=True)
+
+        with open(metadata_csv, "w", encoding="utf-8") as f:
+            f.write("\n".join(existing_rows) + "\n")
+
+        dataset_info = {
+            "dataset_format": "ljspeech",
+            "sample_rate": 22050,
+            "channels": 1,
+            "num_clips": len(existing_rows),
+            "distilled_with_f5": True,
+            "num_distilled": added_count,
+            "cfg_strength": cfg_strength,
+            "target": "piper"
+        }
+        with open(piper_dir / "dataset.json", "w", encoding="utf-8") as f:
+            json.dump(dataset_info, f, indent=2)
+
+        return piper_dir
