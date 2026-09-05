@@ -145,6 +145,7 @@ class EngineService:
         self._loaded_piper_model_path = None
         self._kokoro_model = None
         self._kokoro_pipeline = None
+        self._loaded_kokoro_adapter = None
         self._kanade_model = None
         self._vocos_model = None
         self.cache_synth_dir = Path("cache/synthesized").resolve()
@@ -531,8 +532,10 @@ class EngineService:
         if self._kokoro_pipeline is not None:
             return self._kokoro_pipeline
         try:
+            import warnings
+            warnings.filterwarnings("ignore", category=UserWarning, module="torch.nn.modules.rnn")
             from kokoro import KPipeline
-            self._kokoro_pipeline = KPipeline(lang_code="a")
+            self._kokoro_pipeline = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
             return self._kokoro_pipeline
         except Exception as e:
             logger.warning(f"Could not load PyTorch KPipeline: {e}")
@@ -818,12 +821,29 @@ class EngineService:
             samples = None
             sr = 24000
 
-            # Primary synthesis: Native PyTorch KPipeline with Missouri Drawl phonetics
+            # Primary synthesis: Native PyTorch KPipeline with Missouri Drawl phonetics & AdaIN neural vocoder
             pipeline = self._get_kokoro_pipeline()
             if pipeline is not None and chosen_torch_voice is not None:
+                # Load fine-tuned AdaIN acoustic adapter if present
+                adapter_file = kokoro_dir / f"{char_slug}_adapter.pt"
+                if adapter_file.exists():
+                    try:
+                        if getattr(self, "_loaded_kokoro_adapter", None) != str(adapter_file):
+                            adapter_dict = torch.load(str(adapter_file), map_location="cpu", weights_only=True)
+                            pipeline.model.decoder.load_state_dict(adapter_dict, strict=False)
+                            self._loaded_kokoro_adapter = str(adapter_file)
+                            logger.info(f"Loaded fine-tuned Kokoro AdaIN acoustic adapter from {adapter_file.name}")
+                    except Exception as e:
+                        logger.warning(f"Could not load Kokoro AdaIN adapter: {e}")
+
                 try:
                     logger.info(f"Synthesizing with Native PyTorch Kokoro KPipeline for {cdir.name} (drawl={has_missouri_drawl}, speed={safe_speed:.2f})...")
                     audio_chunks = []
+                    if isinstance(chosen_torch_voice, torch.Tensor):
+                        voice_arg = chosen_torch_voice.float()
+                    else:
+                        voice_arg = chosen_torch_voice
+
                     _, tokens = pipeline.g2p(text.strip())
                     for gs, ps, tks in pipeline.en_tokenize(tokens):
                         if not ps:
@@ -833,7 +853,7 @@ class EngineService:
                             drawled_ps = self.apply_missouri_drawl(ps)
                         else:
                             drawled_ps = ps
-                        gen_res = list(pipeline.generate_from_tokens(drawled_ps, voice=chosen_torch_voice, speed=safe_speed))
+                        gen_res = list(pipeline.generate_from_tokens(drawled_ps, voice=voice_arg, speed=safe_speed))
                         for r in gen_res:
                             if r.audio is not None:
                                 audio_chunks.append(r.audio.cpu().numpy())

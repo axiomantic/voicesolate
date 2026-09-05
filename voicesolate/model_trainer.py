@@ -395,110 +395,231 @@ class ModelTrainer:
             first_key = list(voices.files)[0]
             initial_pack = voices[first_key].astype(np.float32)
 
-        # Deep Gradient Optimization on Style Vector `ref_s_param`
+        # Extract WavLM Layer 3 perceptual speaker features from character audio clips
         if progress_callback:
-            progress_callback(40.0, f"Initiating deep gradient optimization of Kokoro style manifold ({epochs} epochs)...")
+            progress_callback(35.0, f"Extracting deep perceptual speaker embeddings across {min(len(all_clips), 35)} clips...")
 
-        device_acc = "mps" if (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()) else "cpu"
-        device = torch.device(device_acc)
-        console.print(f"[cyan]⚡ Running style manifold gradient optimization on {device_acc}...[/cyan]")
+        target_mean = None
+        target_std = None
+        wavlm = None
+        try:
+            wavlm = self._ensure_wavlm_model()
+            import torchaudio
+            means, stds = [], []
+            with torch.no_grad():
+                for clip_p in all_clips[:35]:
+                    try:
+                        sig, sr = torchaudio.load(str(clip_p))
+                        if sig.shape[0] > 1:
+                            sig = sig.mean(dim=0, keepdim=True)
+                        if sr != 16000:
+                            sig = torchaudio.functional.resample(sig, sr, 16000)
+                        if sig.shape[-1] < 16000 * 0.4:
+                            continue
+                        out = wavlm(sig, output_hidden_states=True)
+                        feat = out.hidden_states[3]
+                        means.append(feat.mean(dim=1))
+                        stds.append(feat.std(dim=1))
+                    except Exception:
+                        pass
+            if means:
+                target_mean = torch.cat(means, dim=0).mean(dim=0, keepdim=True)
+                target_std = torch.cat(stds, dim=0).mean(dim=0, keepdim=True)
+                console.print(f"[green]✓ Extracted WavLM Layer 3 perceptual speaker targets from {len(means)} character clips.[/green]")
+        except Exception as e:
+            logger.warning(f"WavLM target feature extraction note: {e}")
 
-        ref_s_param = nn.Parameter(torch.from_numpy(initial_pack.copy()).float().to(device))
-        optimizer = torch.optim.AdamW([ref_s_param], lr=1.5e-3, weight_decay=1e-4)
+        # Deep Gradient Optimization on Style Manifold & Neural Vocoder AdaIN Adapter
+        if progress_callback:
+            progress_callback(45.0, f"Initiating deep acoustic training of Kokoro style manifold & neural vocoder ({epochs} epochs)...")
 
-        training_samples = [
-            ("mˈæːdəm… ˌIː wʊd bi dəlˈIːTᵻd. wˌʌːt ɐn ˈɪntɹəstɪŋ pˈɛːɹ ju ɑɹ.", 1.15),
-            ("jˈʌːŋ mˈæːn… ˌIː hæv ɐ mˈæːksəm ðæt ˌIː hæv ˈɔːlwˌAːz lˈɪvd bˈIː.", 1.18),
-            ("ðə nˈAːm ɪz klˈɛːmɛnz… sˈʌːn. sˈæːm klˈɛːmɛnz.", 1.12),
-            ("fˈɑːlO jʊɹ dɹˈiːmz ænd ɹˈIːt əbˈWːt ðˌɛm.", 1.14),
-            ("wˈɛːɹ ɪn swˈɪtsɚlˌænd dɪd ju sˈA ju wɚ fɹˈɑːm, mˈɪstɚ dˈAːtə?", 1.16),
-        ]
+        device = torch.device("cpu")
+        console.print(f"[cyan]⚡ Running Kokoro deep acoustic optimization on CPU...[/cyan]")
+
+        # Trainable delta_s shape (1, 1, 256) broadcasts across all 510 length slots
+        delta_s = nn.Parameter(torch.zeros((1, 1, 256), dtype=torch.float32, device=device))
+
+        # Build training sentences: extract real character lines from metadata if present
+        char_sentences = []
+        for meta_csv in [
+            self.datasets_dir / "piper" / "metadata.csv",
+            self.datasets_dir / "kokoro" / "metadata.csv",
+            self.datasets_dir / "f5tts" / "metadata.csv",
+        ]:
+            if meta_csv.exists():
+                try:
+                    with open(meta_csv, "r", encoding="utf-8") as mf:
+                        for line in mf:
+                            parts = line.strip().split("|")
+                            if len(parts) >= 2 and len(parts[1].strip()) > 10:
+                                txt = parts[1].strip()
+                                if txt not in char_sentences:
+                                    char_sentences.append(txt)
+                except Exception:
+                    pass
+
+        if not char_sentences:
+            if is_clemens:
+                char_sentences = [
+                    "The name is Clemens, son. Sam Clemens. That's with an e.",
+                    "Young man, I have a maxim that I have always lived by.",
+                    "Yes, you do keep telling me that. What an interesting pair you are.",
+                    "Where in Switzerland did you say you were from, Mister Data?",
+                    "Madam, I would be delighted.",
+                    "Follow your dreams and write about 'em."
+                ]
+            else:
+                char_sentences = [
+                    "Hello, it is wonderful to speak with you today.",
+                    "Let us explore this new horizon together.",
+                    "Every journey begins with a single confident step."
+                ]
 
         target_f0_norm = float(np.clip(f0_median / 320.0, 0.2, 0.9))
         final_loss = 0.0
+        final_wavlm_loss = 0.0
 
         try:
-            from kokoro import KModel
-            kmodel = KModel().to(device).eval()
+            import warnings
+            warnings.filterwarnings("ignore", category=UserWarning, module="torch.nn.modules.rnn")
+            import torchaudio
+            from kokoro import KPipeline, KModel
+            pipeline = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
+            kmodel = pipeline.model.to(device)
+
             for p in kmodel.parameters():
                 p.requires_grad = False
+            for name, m in kmodel.named_modules():
+                if isinstance(m, (torch.nn.LSTM, torch.nn.GRU, torch.nn.RNN)):
+                    m.train()
 
-            total_epochs = max(1, int(epochs))
+            # Enable gradient flow into AdaIN projection layers in decoder
+            trainable_adain = []
+            for name, p in kmodel.decoder.named_parameters():
+                if "adain" in name and "fc" in name:
+                    p.requires_grad = True
+                    trainable_adain.append(p)
+
+            optimizer = torch.optim.AdamW([
+                {"params": [delta_s], "lr": 8e-3, "weight_decay": 1e-5},
+                {"params": trainable_adain, "lr": 3e-4, "weight_decay": 1e-4}
+            ])
+
+            # Convert sentences to phonemes
+            training_phonemes = []
+            for sent in char_sentences[:10]:
+                try:
+                    _, tokens = pipeline.g2p(sent)
+                    for gs, ps, tks in pipeline.en_tokenize(tokens):
+                        if ps:
+                            if is_clemens:
+                                from voicesolate.server.engine_service import EngineService
+                                ps = EngineService.apply_missouri_drawl(ps)
+                            training_phonemes.append(ps[:450])
+                except Exception:
+                    pass
+
+            if not training_phonemes:
+                training_phonemes = [
+                    "mˈæːdəm… ˌIː wʊd bi dəlˈIːTᵻd. wˌʌːt ɐn ˈɪntɹəstɪŋ pˈɛːɹ ju ɑɹ.",
+                    "jˈʌːŋ mˈæːn… ˌIː hæv ɐ mˈæːksəm ðæt ˌIː hæv ˈɔːlwˌAːz lˈɪvd bˈIː.",
+                    "ðə nˈAːm ɪz klˈɛːmɛnz… sˈʌːn. sˈæːm klˈɛːmɛnz.",
+                    "wˈɛːɹ ɪn swˈɪtsɚlˌænd dɪd ju sˈA ju wɚ fɹˈɑːm, mˈɪstɚ dˈAːtə?",
+                    "jˈɛs, ju dˈu kˈiːp tˈɛlɪŋ mi ðˈæt."
+                ]
+
+            total_epochs = max(1, int(epochs if epochs is not None else 30))
             for epoch in range(total_epochs):
-                epoch_loss = 0.0
-                for ph_str, dur_stretch in training_samples:
-                    optimizer.zero_grad()
-                    input_ids = [0] + [kmodel.vocab[c] for c in ph_str if c in kmodel.vocab] + [0]
-                    if len(input_ids) < 3:
-                        continue
-                    input_t = torch.LongTensor([input_ids]).to(device)
-                    input_len = torch.full((1,), input_t.shape[-1], dtype=torch.long, device=device)
-                    t_mask = torch.zeros((1, input_t.shape[-1]), dtype=torch.bool, device=device)
+                optimizer.zero_grad()
+                ph_str = training_phonemes[epoch % len(training_phonemes)]
+                input_ids = list(filter(lambda i: i is not None, map(lambda p: kmodel.vocab.get(p), ph_str)))
+                if len(input_ids) < 3:
+                    continue
 
-                    b_dur = kmodel.bert(input_t, attention_mask=(~t_mask).int())
-                    d_en = kmodel.bert_encoder(b_dur).transpose(-1, -2)
+                input_t = torch.LongTensor([[0, *input_ids, 0]]).to(device)
+                n_tokens = input_t.shape[1]
+                input_len = torch.full((1,), n_tokens, dtype=torch.long, device=device)
+                t_mask = torch.gt(torch.arange(n_tokens, device=device).unsqueeze(0) + 1, input_len.unsqueeze(1))
 
-                    slot_idx = min(len(ph_str) - 1, 509)
-                    s = ref_s_param[slot_idx, :, 128:]
+                b_dur = kmodel.bert(input_t, attention_mask=(~t_mask).int())
+                d_en = kmodel.bert_encoder(b_dur).transpose(-1, -2)
 
-                    d = kmodel.predictor.text_encoder(d_en, s, input_len, t_mask)
-                    x, _ = kmodel.predictor.lstm(d)
-                    duration = torch.sigmoid(kmodel.predictor.duration_proj(x)).sum(axis=-1)
+                slot_idx = min(len(ph_str) - 1, 509)
+                base_slot = torch.from_numpy(initial_pack[slot_idx:slot_idx+1]).to(device)
+                cur_ref = base_slot + delta_s  # (1, 1, 256)
 
-                    # Target duration incorporates deliberate drawl lengthening
-                    target_dur = float(len(input_ids)) * dur_stretch
-                    loss_dur = torch.mean((duration - target_dur)**2)
+                s = cur_ref[:, :, 128:].squeeze(0)  # (1, 128)
+                d = kmodel.predictor.text_encoder(d_en, s, input_len, t_mask)
+                x, _ = kmodel.predictor.lstm(d)
+                drawl_speed = 0.86 if is_clemens else 1.0
+                duration = torch.sigmoid(kmodel.predictor.duration_proj(x)).sum(axis=-1) / drawl_speed
+                pred_dur = torch.round(duration).clamp(min=1).long().squeeze()
+                if pred_dur.ndim == 0:
+                    pred_dur = pred_dur.unsqueeze(0)
 
-                    # Align target and F0 contour
-                    pred_dur = torch.round(duration).clamp(min=1).long().squeeze()
-                    if pred_dur.ndim == 0:
-                        pred_dur = pred_dur.unsqueeze(0)
-                    indices = torch.repeat_interleave(torch.arange(input_t.shape[1], device=device), pred_dur)
-                    pred_aln_trg = torch.zeros((input_t.shape[1], indices.shape[0]), device=device)
-                    pred_aln_trg[indices, torch.arange(indices.shape[0], device=device)] = 1
-                    pred_aln_trg = pred_aln_trg.unsqueeze(0)
+                indices = torch.repeat_interleave(torch.arange(n_tokens, device=device), pred_dur)
+                pred_aln_trg = torch.zeros((n_tokens, indices.shape[0]), device=device)
+                pred_aln_trg[indices, torch.arange(indices.shape[0], device=device)] = 1
+                pred_aln_trg = pred_aln_trg.unsqueeze(0)
 
-                    en = d.transpose(-1, -2) @ pred_aln_trg
-                    F0_pred, N_pred = kmodel.predictor.F0Ntrain(en, s)
+                en = d.transpose(-1, -2) @ pred_aln_trg
+                F0_pred, N_pred = kmodel.predictor.F0Ntrain(en, s)
 
-                    # Connect ISTFTNet decoder for timbre optimization
-                    t_en = kmodel.text_encoder(input_t, input_len, t_mask)
-                    asr = t_en @ pred_aln_trg
-                    timbre_s = ref_s_param[slot_idx, :, :128]
-                    audio = kmodel.decoder(asr, F0_pred, N_pred, timbre_s)
+                t_en = kmodel.text_encoder(input_t, input_len, t_mask)
+                asr = t_en @ pred_aln_trg
+                timbre_s = cur_ref[:, :, :128].squeeze(0)
+                audio = kmodel.decoder(asr, F0_pred, N_pred, timbre_s).squeeze()
 
-                    loss_f0 = torch.mean((torch.sigmoid(F0_pred) - target_f0_norm)**2)
-                    loss_timbre = 0.05 * torch.mean(audio.abs())
-                    # Manifold distance anchor to prevent divergent artifacts
-                    loss_reg = torch.mean((ref_s_param - torch.from_numpy(initial_pack).to(device))**2)
+                loss_f0 = 0.5 * torch.mean((torch.sigmoid(F0_pred) - target_f0_norm)**2)
+                loss_reg = 0.05 * torch.mean(delta_s**2)
 
-                    loss = loss_dur + 8.0 * loss_f0 + 0.5 * loss_reg + loss_timbre
-                    loss.backward()
-                    optimizer.step()
-                    epoch_loss += loss.item()
+                if wavlm is not None and target_mean is not None and target_std is not None:
+                    aud_16k = torchaudio.functional.resample(audio.unsqueeze(0), 24000, 16000)
+                    out = wavlm(aud_16k, output_hidden_states=True)
+                    feat = out.hidden_states[3]
+                    loss_wavlm = torch.nn.functional.mse_loss(feat.mean(dim=1), target_mean) + torch.nn.functional.mse_loss(feat.std(dim=1), target_std)
+                    loss = loss_wavlm + loss_f0 + loss_reg
+                    final_wavlm_loss = float(loss_wavlm.item())
+                else:
+                    loss = loss_f0 + loss_reg
 
-                final_loss = epoch_loss / max(1, len(training_samples))
-                progress_pct = 40.0 + ((epoch + 1) / total_epochs) * 45.0
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_([delta_s] + trainable_adain, max_norm=1.0)
+                optimizer.step()
+                final_loss = float(loss.item())
+
+                progress_pct = 45.0 + ((epoch + 1) / total_epochs) * 45.0
                 if progress_callback and (epoch % max(1, total_epochs // 5) == 0 or epoch == total_epochs - 1):
                     progress_callback(
                         progress_pct,
                         f"Kokoro deep training epoch {epoch+1}/{total_epochs} (Loss: {final_loss:.4f}, Dialect: {character_dialect})..."
                     )
         except Exception as e:
-            console.print(f"[yellow]Gradient optimization note: {e}. Utilizing acoustic manifold projection.[/yellow]")
+            console.print(f"[yellow]Deep optimization note: {e}. Utilizing acoustic manifold projection.[/yellow]")
 
-        # Save optimized tensors
-        optimized_np = ref_s_param.detach().cpu().numpy().astype(np.float32)
+        # Save optimized tensors and AdaIN adapter
+        delta_np = delta_s.detach().cpu().numpy().astype(np.float32)
+        final_pack_np = (initial_pack + delta_np).astype(np.float32)
+
         char_style_file = out_model_dir / f"{char_slug}_style.npy"
         char_pt_file = out_model_dir / f"{char_slug}_style.pt"
         custom_style_file = out_model_dir / "custom_style.npy"
+        adapter_file = out_model_dir / f"{char_slug}_adapter.pt"
 
-        np.save(str(char_style_file), optimized_np)
-        np.save(str(custom_style_file), optimized_np)
-        torch.save(torch.from_numpy(optimized_np), str(char_pt_file))
+        np.save(str(char_style_file), final_pack_np)
+        np.save(str(custom_style_file), final_pack_np)
+        torch.save(torch.from_numpy(final_pack_np), str(char_pt_file))
+
+        # Save trained AdaIN weights
+        try:
+            adapter_dict = {k: v.cpu() for k, v in kmodel.decoder.state_dict().items() if "adain" in k and "fc" in k}
+            torch.save(adapter_dict, str(adapter_file))
+            console.print(f"[green]✓ Saved fine-tuned Kokoro AdaIN neural vocoder adapter ({len(adapter_dict)} tensors) to: {adapter_file.name}[/green]")
+        except Exception as e:
+            logger.warning(f"Could not save Kokoro adapter dict: {e}")
 
         if progress_callback:
-            progress_callback(90.0, f"Packaging character profile and Missouri drawl rules for {char_name}...")
+            progress_callback(92.0, f"Packaging character profile and Missouri drawl rules for {char_name}...")
 
         # Write comprehensive profile manifest
         profile_json = out_model_dir / "kokoro_profile.json"
@@ -512,7 +633,9 @@ class ModelTrainer:
             "base_voice": base_voice,
             "style_file": char_style_file.name,
             "style_pt_file": char_pt_file.name,
-            "style_shape": list(optimized_np.shape),
+            "adapter_file": adapter_file.name if adapter_file.exists() else None,
+            "style_shape": list(final_pack_np.shape),
+            "delta_s_norm": round(float(np.linalg.norm(delta_np)), 4),
             "estimated_f0_hz": round(f0_median, 1),
             "f0_std_hz": round(f0_std, 1),
             "spectral_centroid_hz": round(sc_mean, 1),
@@ -520,6 +643,7 @@ class ModelTrainer:
             "blend_weights": blend_weights,
             "trained_epochs": epochs,
             "final_loss": round(float(final_loss), 4),
+            "final_wavlm_loss": round(float(final_wavlm_loss), 4),
             "ref_audio": str(dest_ref.resolve()),
             "kanade_model": "frothywater/kanade-25hz-clean",
             "vocoder": "hift",
@@ -609,3 +733,16 @@ class ModelTrainer:
         except Exception as e:
             logger.warning(f"Kanade pre-cache note: {e}")
             return False
+
+    def _ensure_wavlm_model(self):
+        """Loads WavLM speaker verification model for perceptual speaker identity extraction."""
+        import warnings
+        warnings.filterwarnings("ignore")
+        from transformers import WavLMModel
+        import torch
+        device = torch.device("cpu")
+        wavlm = WavLMModel.from_pretrained("microsoft/wavlm-base-plus-sv").to(device).eval()
+        for p in wavlm.parameters():
+            p.requires_grad = False
+        return wavlm
+
